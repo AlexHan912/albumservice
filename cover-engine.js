@@ -1,4 +1,4 @@
-/* cover-engine.js - FINAL V100: Cropper Sync */
+/* cover-engine.js - FINAL V101: Cropper & Security Fix */
 
 const CONFIG = {
     renderScale: 2.0,
@@ -21,6 +21,8 @@ const CoverEngine = {
 
     loadSimpleImage: function(path, callback) {
         const img = new Image();
+        // FIX: CORS Policy
+        img.crossOrigin = 'anonymous';
         img.onload = () => callback(path);
         img.onerror = () => { callback(null); };
         img.src = path;
@@ -40,24 +42,20 @@ const CoverEngine = {
         
         const fmt = this.getFormat(state);
         
-        // Полный размер в ММ
         const fullW_mm = fmt.bleedMm + fmt.widthMm + fmt.spineMm + fmt.widthMm + fmt.bleedMm;
         const fullH_mm = fmt.bleedMm + fmt.heightMm + fmt.bleedMm;
 
-        // Доступное место
         const dockHeight = 100; 
         const margin = 20;
         const availableWidth = container.clientWidth;
         const availableHeight = Math.max(300, container.clientHeight - dockHeight);
 
-        // Расчет масштаба (Вписать ВСЁ в экран)
         const scaleX = (availableWidth - margin * 2) / fullW_mm;
         const scaleY = (availableHeight - margin * 2) / fullH_mm;
         const basePPI = Math.min(scaleX, scaleY);
         
         this.canvas.state_ppi = basePPI; 
 
-        // Ставим размер холста равным размеру контейнера (чтобы Panzoom центрировал правильно)
         this.canvas.setWidth(availableWidth); 
         this.canvas.setHeight(availableHeight);
         
@@ -80,7 +78,6 @@ const CoverEngine = {
         const fullW_px = (fmt.bleedMm + fmt.widthMm + fmt.spineMm + fmt.widthMm + fmt.bleedMm) * ppi;
         const fullH_px = (fmt.bleedMm + fmt.heightMm + fmt.bleedMm) * ppi;
         
-        // ЦЕНТРОВКА: Начало рисования
         const startX = (W - fullW_px) / 2;
         const startY = (H - fullH_px) / 2;
 
@@ -90,13 +87,10 @@ const CoverEngine = {
         });
         this.canvas.add(bgRect);
 
-        // Координаты X
         const x_coverBackStart = startX + (fmt.bleedMm * ppi);
         const x_spineStart = x_coverBackStart + (fmt.widthMm * ppi);
         const x_spineEnd = x_spineStart + (fmt.spineMm * ppi);
         const x_coverFrontStart = x_spineEnd;
-        
-        // Координаты Y
         const y_coverTop = startY + (fmt.bleedMm * ppi);
 
         const c = {

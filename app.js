@@ -1,4 +1,4 @@
-/* app.js - FIXED: Cropper Logic & Zoom Center V100 */
+/* app.js - FIXED V101: Zoom Center, Strict Cropper, CORS */
 
 // Глобальные переменные
 let state = {
@@ -17,14 +17,13 @@ let state = {
     imgPos: 'center'
 };
 
-let userModifiedText = false;
 let workspacePanzoom = null;
 
 // =========================================================
 // 1. ГЛАВНЫЙ ЗАПУСК
 // =========================================================
 window.onload = function() {
-    console.log("MALEVICH Configurator Starting...");
+    console.log("MALEVICH Configurator Starting V101...");
 
     setTimeout(() => {
         const loader = document.getElementById('app-loader');
@@ -41,7 +40,6 @@ window.onload = function() {
 
     CoverEngine.init('c');
 
-    // Параметры URL
     const urlParams = new URLSearchParams(window.location.search);
     const currentYear = new Date().getFullYear().toString();
     state.text.date = currentYear;
@@ -81,7 +79,7 @@ function refresh() {
 }
 
 // =========================================================
-// 2. ЛОГИКА ЗУМА (ИСПРАВЛЕНО ЦЕНТРИРОВАНИЕ)
+// 2. ЛОГИКА ЗУМА (ИСПРАВЛЕНА ЦЕНТРОВКА)
 // =========================================================
 function initWorkspaceZoom() {
     const workspaceEl = document.getElementById('workspace');
@@ -90,21 +88,22 @@ function initWorkspaceZoom() {
     if (canvasContainer && window.Panzoom) {
         if (workspacePanzoom) workspacePanzoom.destroy();
 
-        // Важно: Центрируем через CSS перед запуском Panzoom
-        canvasContainer.style.margin = 'auto'; 
+        // ВАЖНО: Принудительно центрируем точку трансформации
+        canvasContainer.style.transformOrigin = 'center center';
+        canvasContainer.style.margin = 'auto'; // Центрируем сам блок во флексе
         
         workspacePanzoom = Panzoom(canvasContainer, {
             maxScale: 3, 
             minScale: 0.1, 
-            startScale: 0.85, // Начинаем чуть меньше 100%, чтобы видеть поля
+            startScale: 0.85, // Чуть меньше 100%, чтобы красиво вписалось
             contain: null, 
             canvas: false 
         });
         
         workspaceEl.addEventListener('wheel', workspacePanzoom.zoomWithWheel);
         
-        // Принудительный сброс в центр
-        setTimeout(() => { zoomCanvas('reset'); }, 100);
+        // Сразу после инициализации сбрасываем в центр
+        setTimeout(() => { zoomCanvas('reset'); }, 50);
 
         canvasContainer.addEventListener('panzoomchange', (e) => {
             const scale = e.detail.scale;
@@ -123,14 +122,15 @@ window.zoomCanvas = (action) => {
     if (action === 'in') workspacePanzoom.zoomIn();
     else if (action === 'out') workspacePanzoom.zoomOut();
     else if (action === 'reset') {
+        // Жесткий сброс
         workspacePanzoom.reset();
         setTimeout(() => {
              const canvasContainer = document.querySelector('.canvas-container');
              if(canvasContainer) {
-                 // Сброс трансформации CSS
+                 // Сбрасываем CSS трансформацию вручную для гарантии
                  canvasContainer.style.transform = 'scale(0.85) translate(0px, 0px)'; 
-                 // Синхронизация Panzoom
-                 workspacePanzoom.zoom(0.85, { animate: true });
+                 // Синхронизируем Panzoom
+                 workspacePanzoom.zoom(0.85, { animate: false });
                  workspacePanzoom.pan(0, 0);
              }
         }, 10);
@@ -174,15 +174,15 @@ window.updateActionButtons = function() {
 window.handleCanvasClick = () => {}; 
 
 // =========================================================
-// 3. TELEGRAM (ПРОВЕРКА PROTOCOL)
+// 3. TELEGRAM (С ПРОВЕРКОЙ БЕЗОПАСНОСТИ)
 // =========================================================
 window.sendToTelegram = function() {
     const btn = document.getElementById('sendTgBtn');
     const originalText = btn.innerText;
     
-    // ПРОВЕРКА ЛОКАЛЬНОГО ЗАПУСКА
+    // Блокируем, если открыто локально через файл (C:/...)
     if (window.location.protocol === 'file:') {
-        alert("⚠️ ОШИБКА ОТПРАВКИ\n\nВы запустили сайт как файл (file://).\nБраузер блокирует отправку данных в целях безопасности.\n\nПожалуйста, откройте сайт через Vercel или локальный сервер (localhost).");
+        alert("⚠️ ОШИБКА: Нельзя отправить заказ из локального файла.\nБраузер блокирует это.\n\nЗагрузите проект на Vercel или используйте локальный сервер.");
         return;
     }
 
@@ -193,7 +193,7 @@ window.sendToTelegram = function() {
         clientPhone: urlParams.get('phone') || 'Не указан'
     };
 
-    btn.innerText = "ГЕНЕРАЦИЯ PRINT FILE...";
+    btn.innerText = "ГЕНЕРАЦИЯ...";
     btn.disabled = true;
     btn.style.opacity = "0.7";
 
@@ -206,8 +206,7 @@ window.sendToTelegram = function() {
             const targetPxPerMm = 300 / 25.4; 
             const multiplier = CoverEngine.getPrintMultiplier(targetPxPerMm);
 
-            console.log(`Generating 300 DPI. Multiplier: ${multiplier.toFixed(2)}`);
-
+            // Используем JPEG 0.85 для уменьшения размера и ошибок памяти
             const dataUrl = CoverEngine.canvas.toDataURL({ 
                 format: 'jpeg', 
                 quality: 0.85,       
@@ -230,12 +229,12 @@ window.sendToTelegram = function() {
             })
             .then(res => res.json())
             .then(data => {
-                if (data.success) alert(`✅ Файл для печати (300 DPI) отправлен!`);
+                if (data.success) alert(`✅ Заказ #${orderData.orderId} успешно отправлен!`);
                 else alert("Ошибка отправки: " + (data.error || "Error"));
             })
             .catch(err => {
                 console.error(err);
-                alert("Ошибка сети. Проверьте подключение.");
+                alert("Ошибка сети. Проверьте CORS.");
             })
             .finally(() => {
                 btn.innerText = originalText;
@@ -367,6 +366,8 @@ function loadGal(type, cat, target) {
         const previewUrl = `assets/${folder}/${previewName}`;
         const printUrl = `assets/${folder}/${f}`;
         img.src = previewUrl; img.onerror = () => { img.src = printUrl; };
+        // FIX: CORS
+        img.crossOrigin = 'anonymous'; 
         item.appendChild(img);
         item.onclick = () => {
             if (typeof CoverEngine !== 'undefined') {
@@ -473,6 +474,8 @@ function processAndResizeImage(file, maxSize, outputType, callback) {
     const reader = new FileReader();
     reader.onload = (ev) => {
         const img = new Image();
+        // FIX: CORS для локальных файлов
+        img.crossOrigin = 'anonymous';
         img.onload = () => {
             let width = img.width; let height = img.height;
             if (width > height) { if (width > maxSize) { height *= maxSize / width; width = maxSize; } }
@@ -547,7 +550,7 @@ window.setScale = (s) => {
 window.triggerAssetLoader = () => {};
 
 // =========================================================
-// 5. CROPPER TOOL (ИСПРАВЛЕНА ЛОГИКА)
+// 5. CROPPER TOOL (СТРОГИЕ ГРАНИЦЫ)
 // =========================================================
 const CropperTool = {
     canvas: null,
@@ -565,11 +568,11 @@ const CropperTool = {
         this.canvas = document.getElementById('cropCanvas');
         this.ctx = this.canvas.getContext('2d');
         this.maskType = type;
-        
         this.canvas.width = this.canvasSize;
         this.canvas.height = this.canvasSize;
 
         const img = new Image();
+        img.crossOrigin = 'anonymous'; // FIX CORS
         img.onload = () => {
             this.image = img;
             this.scale = Math.min(this.canvasSize / img.width, this.canvasSize / img.height); 
@@ -593,7 +596,6 @@ const CropperTool = {
         // Рисуем картинку
         this.ctx.drawImage(this.image, this.offsetX, this.offsetY, this.image.width * this.scale, this.image.height * this.scale);
 
-        // Затемняем
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -624,11 +626,9 @@ const CropperTool = {
         }
         this.ctx.clip();
 
-        // Чистое изображение
         this.ctx.drawImage(this.image, this.offsetX, this.offsetY, this.image.width * this.scale, this.image.height * this.scale);
         this.ctx.restore();
 
-        // Рамка
         this.ctx.strokeStyle = '#D4AF37';
         this.ctx.lineWidth = 2;
         this.ctx.stroke();
@@ -652,19 +652,39 @@ const CropperTool = {
 
         let lastX, lastY;
         const startDrag = (x, y) => { this.isDragging = true; lastX = x; lastY = y; };
+        
         const moveDrag = (x, y) => {
             if (this.isDragging) {
                 const dx = x - lastX;
                 const dy = y - lastY;
                 
-                // Ограничение (чтобы картинка не улетела)
-                // Простое решение: не даем центру картинки уйти слишком далеко от центра канваса
-                const imgCenterX = this.offsetX + dx + (this.image.width * this.scale / 2);
-                const centerDist = Math.abs(imgCenterX - this.canvasSize/2);
-                
-                // Разрешаем двигать свободно, но с ограничением
-                this.offsetX += dx;
-                this.offsetY += dy;
+                // === СТРОГОЕ ОГРАНИЧЕНИЕ (CLAMP) ===
+                // Границы маски
+                const maskX = (this.canvasSize - this.maskW) / 2;
+                const maskY = (this.canvasSize - this.maskH) / 2;
+                const maskRight = maskX + this.maskW;
+                const maskBottom = maskY + this.maskH;
+
+                // Размеры картинки
+                const imgW = this.image.width * this.scale;
+                const imgH = this.image.height * this.scale;
+
+                // Предлагаемые новые координаты
+                let newOffsetX = this.offsetX + dx;
+                let newOffsetY = this.offsetY + dy;
+
+                // 1. Левый край картинки не может быть правее левого края маски
+                if (newOffsetX > maskX) newOffsetX = maskX;
+                // 2. Правый край картинки не может быть левее правого края маски
+                if (newOffsetX + imgW < maskRight) newOffsetX = maskRight - imgW;
+
+                // 3. Верхний край картинки не может быть ниже верхнего края маски
+                if (newOffsetY > maskY) newOffsetY = maskY;
+                // 4. Нижний край картинки не может быть выше нижнего края маски
+                if (newOffsetY + imgH < maskBottom) newOffsetY = maskBottom - imgH;
+
+                this.offsetX = newOffsetX;
+                this.offsetY = newOffsetY;
                 
                 lastX = x;
                 lastY = y;
@@ -700,10 +720,6 @@ const CropperTool = {
     },
 
     apply: function() {
-        // === ИСПРАВЛЕННАЯ ЛОГИКА ПЕРЕДАЧИ ДАННЫХ ===
-        // Мы передаем смещение В ПИКСЕЛЯХ ЭКРАНА КРОППЕРА
-        // Движок сам пересчитает их через коэффициент (w / maskW)
-        
         const maskCX = this.canvasSize / 2;
         const maskCY = this.canvasSize / 2;
         
@@ -716,12 +732,9 @@ const CropperTool = {
         return {
             src: this.image.src,
             cropInfo: {
-                // Передаем прямое смещение в пикселях маски
                 left: deltaX, 
                 top: deltaY,
-                // Масштаб картинки относительно маски
                 scale: this.scale,
-                // Размер маски в пикселях (для масштабирования в движке)
                 slotPixelSize: this.maskW 
             }
         };
