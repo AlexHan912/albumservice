@@ -1,11 +1,11 @@
-/* app.js - V97: MM Formats Support */
+/* app.js - FIXED: Cropper Added & Zoom Center */
 
 // Глобальные переменные
 let state = {
-    format: '30x30', // Теперь храним ключ формата (например, '30x30')
+    format: '30x30',
     layout: 'text_icon', 
     ppi: 10, 
-    slotSize: { w: 6, h: 6 }, // Это относительные единицы для кроппера (будут пересчитаны)
+    slotSize: { w: 6, h: 6 }, 
     maskType: 'rect',
     text: {
         lines: [ { text: "THE VISUAL DIARY", upper: true }, { text: "", upper: false }, { text: "", upper: false } ],
@@ -71,11 +71,8 @@ window.addEventListener('resize', () => {
     setTimeout(() => {
         refresh();
         if(workspacePanzoom) {
-            workspacePanzoom.reset();
-            setTimeout(() => {
-                 const canvasContainer = document.querySelector('.canvas-container');
-                 if(canvasContainer) canvasContainer.style.transform = 'none';
-            }, 50);
+            // При ресайзе сбрасываем и центрируем
+            zoomCanvas('reset');
         }
     }, 100);
 });
@@ -88,7 +85,7 @@ function refresh() {
 }
 
 // =========================================================
-// 2. ЛОГИКА ЗУМА
+// 2. ЛОГИКА ЗУМА (ИСПРАВЛЕНО)
 // =========================================================
 function initWorkspaceZoom() {
     const workspaceEl = document.getElementById('workspace');
@@ -97,11 +94,24 @@ function initWorkspaceZoom() {
     if (canvasContainer && window.Panzoom) {
         if (workspacePanzoom) workspacePanzoom.destroy();
 
+        // Центрируем контейнер перед инициализацией
+        canvasContainer.style.transformOrigin = 'center center';
+        
         workspacePanzoom = Panzoom(canvasContainer, {
-            maxScale: 3, minScale: 0.5, startScale: 1, contain: null, canvas: false 
+            maxScale: 3, 
+            minScale: 0.1, // Разрешаем уменьшать сильно, чтобы увидеть всё
+            startScale: 0.9, // Чуть меньше 100%, чтобы были видны поля
+            contain: null, 
+            canvas: false 
         });
         
         workspaceEl.addEventListener('wheel', workspacePanzoom.zoomWithWheel);
+        
+        // Принудительное центрирование при старте
+        setTimeout(() => {
+            zoomCanvas('reset');
+        }, 100);
+
         canvasContainer.addEventListener('panzoomchange', (e) => {
             const scale = e.detail.scale;
             const btn100 = document.getElementById('btnZoomReset');
@@ -115,17 +125,21 @@ function initWorkspaceZoom() {
 
 window.zoomCanvas = (action) => {
     if (!workspacePanzoom) return;
+    
     if (action === 'in') workspacePanzoom.zoomIn();
     else if (action === 'out') workspacePanzoom.zoomOut();
     else if (action === 'reset') {
-        workspacePanzoom.reset(); 
+        // Сброс и центровка
+        workspacePanzoom.reset();
         setTimeout(() => {
              const canvasContainer = document.querySelector('.canvas-container');
              if(canvasContainer) {
-                 canvasContainer.style.transform = 'scale(1) translate(0px, 0px)';
-                 canvasContainer.style.transformOrigin = '50% 50%';
+                 // Сброс трансформации CSS для идеального центра flexbox
+                 canvasContainer.style.transform = 'scale(0.9) translate(0px, 0px)'; 
+                 // Сообщаем Panzoom о сбросе
+                 workspacePanzoom.zoom(0.9, { animate: true });
+                 workspacePanzoom.pan(0, 0);
              }
-             workspacePanzoom.reset(); 
         }, 10);
     }
 };
@@ -173,6 +187,12 @@ window.sendToTelegram = function() {
     const btn = document.getElementById('sendTgBtn');
     const originalText = btn.innerText;
     
+    // Проверка: работает ли с локального файла
+    if (window.location.protocol === 'file:') {
+        alert("⚠️ Ошибка: Отправка в Telegram не работает при запуске из файла.\nПожалуйста, загрузите проект на Vercel или используйте локальный сервер.");
+        return;
+    }
+
     const urlParams = new URLSearchParams(window.location.search);
     const orderData = {
         orderId: urlParams.get('order_id') || 'Без номера',
@@ -188,19 +208,21 @@ window.sendToTelegram = function() {
         try {
             if (typeof CoverEngine === 'undefined' || !CoverEngine.canvas) throw new Error("Canvas Error");
 
-            // Расчет: 300 пикселей на дюйм
-            // state.ppi - это текущее экранное разрешение (px/mm) * scale
-            // Нам нужно физическое: 300 / 25.4 = 11.81 px/mm
-            
+            // Проверка PPI
+            if (!CoverEngine.canvas.state_ppi) {
+                // Если вдруг PPI не задан, берем дефолт, чтобы не делить на 0
+                CoverEngine.canvas.state_ppi = 5; 
+            }
+
             const targetPxPerMm = 300 / 25.4; 
-            // CoverEngine.getPrintMultiplier() вернет нужный коэффициент
             const multiplier = CoverEngine.getPrintMultiplier(targetPxPerMm);
 
             console.log(`Generating 300 DPI. Multiplier: ${multiplier.toFixed(2)}`);
 
+            // JPEG 0.85 Quality to save size
             const dataUrl = CoverEngine.canvas.toDataURL({ 
                 format: 'jpeg', 
-                quality: 1.0,       
+                quality: 0.85,       
                 multiplier: multiplier 
             });
             
@@ -225,7 +247,7 @@ window.sendToTelegram = function() {
             })
             .catch(err => {
                 console.error(err);
-                alert("Ошибка сети.");
+                alert("Ошибка сети. Проверьте CORS или лимиты Vercel.");
             })
             .finally(() => {
                 btn.innerText = originalText;
@@ -539,3 +561,216 @@ window.setScale = (s) => {
     }
 };
 window.triggerAssetLoader = () => {};
+
+// =========================================================
+// 5. CROPPER TOOL (ДОБАВЛЕНО!)
+// =========================================================
+const CropperTool = {
+    canvas: null,
+    ctx: null,
+    image: null,
+    scale: 1,
+    offsetX: 0, offsetY: 0,
+    isDragging: false,
+    startX: 0, startY: 0,
+    maskW: 0, maskH: 0,
+    maskType: 'rect',
+    canvasSize: 300, // Размер области предпросмотра
+
+    start: function(imageUrl, wRatio, hRatio, type) {
+        this.canvas = document.getElementById('cropCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.maskType = type;
+        
+        // Устанавливаем размер канваса кроппера
+        this.canvas.width = this.canvasSize;
+        this.canvas.height = this.canvasSize;
+
+        const img = new Image();
+        img.onload = () => {
+            this.image = img;
+            // Сброс позиционирования
+            this.scale = Math.min(this.canvasSize / img.width, this.canvasSize / img.height); 
+            // Центрируем
+            this.offsetX = (this.canvasSize - (img.width * this.scale)) / 2;
+            this.offsetY = (this.canvasSize - (img.height * this.scale)) / 2;
+            
+            this.drawOverlay(wRatio, hRatio);
+            this.setupEvents();
+        };
+        img.src = imageUrl;
+    },
+
+    drawOverlay: function(w, h) {
+        if (!this.ctx || !this.image) return;
+        
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.fillStyle = '#000';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Рисуем картинку
+        this.ctx.drawImage(
+            this.image, 
+            this.offsetX, this.offsetY, 
+            this.image.width * this.scale, 
+            this.image.height * this.scale
+        );
+
+        // Затемняем всё
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Вычисляем размер маски относительно канваса (макс 80% от размера канваса)
+        const maxSize = this.canvasSize * 0.8;
+        let maskPixelW, maskPixelH;
+
+        if (w >= h) {
+            maskPixelW = maxSize;
+            maskPixelH = maxSize * (h / w);
+        } else {
+            maskPixelH = maxSize;
+            maskPixelW = maxSize * (w / h);
+        }
+
+        this.maskW = maskPixelW;
+        this.maskH = maskPixelH;
+
+        const maskX = (this.canvasSize - maskPixelW) / 2;
+        const maskY = (this.canvasSize - maskPixelH) / 2;
+
+        this.ctx.save();
+        this.ctx.beginPath();
+        if (this.maskType === 'circle') {
+            this.ctx.arc(this.canvasSize/2, this.canvasSize/2, maskPixelW/2, 0, Math.PI*2);
+        } else {
+            this.ctx.rect(maskX, maskY, maskPixelW, maskPixelH);
+        }
+        this.ctx.clip();
+
+        // Рисуем "чистую" картинку внутри маски
+        this.ctx.drawImage(
+            this.image, 
+            this.offsetX, this.offsetY, 
+            this.image.width * this.scale, 
+            this.image.height * this.scale
+        );
+        this.ctx.restore();
+
+        // Рамка
+        this.ctx.strokeStyle = '#D4AF37';
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
+    },
+
+    setupEvents: function() {
+        const slider = document.getElementById('zoomSlider');
+        slider.value = 1;
+        slider.oninput = (e) => {
+            const zoom = parseFloat(e.target.value);
+            // Базовый масштаб * зум слайдера
+            const baseScale = Math.min(this.canvasSize / this.image.width, this.canvasSize / this.image.height);
+            // Сохраняем центр при зуме (упрощенно)
+            const oldScale = this.scale;
+            this.scale = baseScale * zoom;
+            
+            // Корректировка смещения, чтобы зумить в центр
+            const ratio = this.scale / oldScale;
+            this.offsetX = this.canvasSize/2 - (this.canvasSize/2 - this.offsetX) * ratio;
+            this.offsetY = this.canvasSize/2 - (this.canvasSize/2 - this.offsetY) * ratio;
+
+            this.drawOverlay(state.slotSize.w, state.slotSize.h);
+        };
+
+        // Мышь / Тач
+        let lastX, lastY;
+        
+        const startDrag = (x, y) => {
+            this.isDragging = true;
+            lastX = x;
+            lastY = y;
+        };
+        const moveDrag = (x, y) => {
+            if (this.isDragging) {
+                this.offsetX += x - lastX;
+                this.offsetY += y - lastY;
+                lastX = x;
+                lastY = y;
+                this.drawOverlay(state.slotSize.w, state.slotSize.h);
+            }
+        };
+        const endDrag = () => { this.isDragging = false; };
+
+        this.canvas.onmousedown = (e) => startDrag(e.clientX, e.clientY);
+        window.onmousemove = (e) => moveDrag(e.clientX, e.clientY);
+        window.onmouseup = endDrag;
+
+        this.canvas.ontouchstart = (e) => { startDrag(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); };
+        window.ontouchmove = (e) => { moveDrag(e.touches[0].clientX, e.touches[0].clientY); };
+        window.ontouchend = endDrag;
+    },
+
+    rotate: function() {
+        if (!this.image) return;
+        // Создаем временный канвас для поворота
+        const c = document.createElement('canvas');
+        c.width = this.image.height;
+        c.height = this.image.width;
+        const ctx = c.getContext('2d');
+        ctx.translate(c.width/2, c.height/2);
+        ctx.rotate(90 * Math.PI / 180);
+        ctx.drawImage(this.image, -this.image.width/2, -this.image.height/2);
+        
+        // Обновляем картинку
+        const newImg = new Image();
+        newImg.onload = () => {
+            this.image = newImg;
+            this.drawOverlay(state.slotSize.w, state.slotSize.h);
+        };
+        newImg.src = c.toDataURL();
+    },
+
+    apply: function() {
+        // Возвращаем объект с данными для CoverEngine
+        // Нам нужно знать, какая часть изображения (в % или пикселях) попала в маску
+        
+        // Центр маски на канвасе
+        const maskCX = this.canvasSize / 2;
+        const maskCY = this.canvasSize / 2;
+        
+        // Положение картинки на канвасе: this.offsetX, this.offsetY
+        // Размер картинки на канвасе: this.image.width * this.scale
+        
+        // Нам нужно смещение центра картинки относительно центра маски
+        // Image Center
+        const imgCX = this.offsetX + (this.image.width * this.scale / 2);
+        const imgCY = this.offsetY + (this.image.height * this.scale / 2);
+        
+        // Delta (насколько картинка сдвинута от центра маски)
+        const deltaX = imgCX - maskCX;
+        const deltaY = imgCY - maskCY;
+        
+        // Теперь переводим это в координаты для оригинального изображения
+        // Если scale = 0.5, то 1 пиксель на экране = 2 пикселя оригинала
+        const realDeltaX = deltaX / this.scale;
+        const realDeltaY = deltaY / this.scale;
+        
+        // Вычисляем, какой кусок оригинала вырезать. 
+        // В CoverEngine мы просто сдвигаем картинку внутри маски
+        
+        // Передаем параметры для Fabric.js
+        return {
+            src: this.image.src,
+            cropInfo: {
+                // Смещение центра изображения относительно центра слота
+                left: realDeltaX, 
+                top: realDeltaY,
+                // Масштаб относительно "вписанного" состояния
+                // Если image.width * scale == maskW, это 100%
+                // Мы передаем просто scale, а CoverEngine пересчитает
+                // Но лучше передать соотношение маски к картинке
+                scale: this.scale, // Текущий масштаб на экране
+                slotPixelSize: this.maskW // Размер маски на экране в пикселях
+            }
+        };
+    }
+};
