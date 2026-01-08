@@ -1,32 +1,10 @@
-/* assets.js - GLOBAL DATA V97 (Formats & Bleeds) */
+/* assets.js - V98: Print Formats & Data */
 
-// 1. ФОРМАТЫ КНИГ (РАЗМЕРЫ В ММ)
+// 1. ФОРМАТЫ КНИГ (ТОЧНЫЕ РАЗМЕРЫ В ММ)
 window.BOOK_FORMATS = {
-    '30x30': {
-        name: '30x30',
-        label: '30x30',
-        widthMm: 303,   // Ширина одной сторонки
-        heightMm: 303,  // Высота одной сторонки
-        spineMm: 20,    // Корешок
-        bleedMm: 15     // Подворот (Wraparound)
-    },
-    '25x25': {
-        name: '25x25',
-        label: '25x25',
-        widthMm: 253,
-        heightMm: 253,
-        spineMm: 20,
-        bleedMm: 15
-    },
-    '20x20': {
-        name: '20x20',
-        label: '20x20',
-        widthMm: 203,
-        heightMm: 203,
-        spineMm: 20,
-        bleedMm: 15
-    }
-    // Сюда легко добавить новый формат, например '30x20'
+    '30x30': { widthMm: 303, heightMm: 303, spineMm: 20, bleedMm: 15 },
+    '25x25': { widthMm: 253, heightMm: 253, spineMm: 20, bleedMm: 15 },
+    '20x20': { widthMm: 203, heightMm: 203, spineMm: 20, bleedMm: 15 }
 };
 
 // 2. СИМВОЛЫ И ГРАФИКА
