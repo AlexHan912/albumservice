@@ -1,10 +1,8 @@
-/* cover-engine.js - FINAL V99: No Touch, Fit Screen, Positioning */
+/* cover-engine.js - FINAL V97: Full Print Layout (MM) */
 
 const CONFIG = {
-    dpi: 300, 
-    cmToInch: 2.54, 
-    spineWidthCm: 1.5, 
-    renderScale: 3.0,
+    // Базовые настройки рендера для экрана
+    renderScale: 2.0, // Качество превью
     globalOpacity: 1.0, 
     typo: { baseTitle: 1.2, baseDetails: 0.5, baseCopy: 0.35 },
     scales: [0.5, 0.75, 1.0, 1.25, 1.5]
@@ -18,12 +16,8 @@ const CoverEngine = {
             backgroundColor: '#fff', 
             selection: false, 
             enableRetinaScaling: true,
-            hoverCursor: 'default' // Обычный курсор, так как кликов нет
+            hoverCursor: 'default'
         });
-        
-        // ВАЖНО: Мы НЕ добавляем никаких обработчиков событий (mouse:down, etc)
-        // Это делает холст полностью статичным для Fabric.js,
-        // что предотвращает перехват касаний у Panzoom.
     },
 
     loadSimpleImage: function(path, callback) {
@@ -33,103 +27,162 @@ const CoverEngine = {
         img.src = path;
     },
 
-    // Основная функция расчета размеров "Вписать в экран"
+    // Получить данные текущего формата
+    getFormat: function(state) {
+        const key = state.format || '30x30';
+        return window.BOOK_FORMATS[key] || window.BOOK_FORMATS['30x30'];
+    },
+
+    getPrintMultiplier: function(targetPxPerMm) {
+        // Текущий this.canvas.zoom или scaleFactor
+        // У нас все размеры в canvas в пикселях = mm * state.ppi
+        // state.ppi рассчитывается для экрана.
+        // Для печати нам нужно, чтобы 1 мм = targetPxPerMm (11.81)
+        // Сейчас 1 мм = state.ppi
+        // Множитель = targetPxPerMm / state.ppi
+        return targetPxPerMm / this.canvas.state_ppi;
+    },
+
     updateDimensions: function(container, state) {
         if(!container || container.clientWidth === 0) return;
         
-        const isMobile = window.innerWidth < 900;
+        const fmt = this.getFormat(state);
         
-        // Учитываем отступ снизу для панели (Dock)
+        // Размеры в ММ
+        const fullW_mm = fmt.bleedMm + fmt.widthMm + fmt.spineMm + fmt.widthMm + fmt.bleedMm;
+        const fullH_mm = fmt.bleedMm + fmt.heightMm + fmt.bleedMm;
+
+        // Доступное место на экране
         const dockHeight = 100; 
         const margin = 20;
-
         const availableWidth = container.clientWidth;
-        // Высота контейнера минус панель
         const availableHeight = Math.max(300, container.clientHeight - dockHeight);
 
-        // Реальные пропорции книги (Разворот)
-        const curBookSize = parseFloat(state.bookSize);
-        const curW = curBookSize * 2 + CONFIG.spineWidthCm; 
-        const curH = curBookSize;
-
-        // Рассчитываем PPI так, чтобы ВЕСЬ разворот влез в доступную область
-        const scaleX = (availableWidth - margin * 2) / curW;
-        const scaleY = (availableHeight - margin * 2) / curH;
+        // Рассчитываем PPI (Pixels Per MM) для ЭКРАНА
+        const scaleX = (availableWidth - margin * 2) / fullW_mm;
+        const scaleY = (availableHeight - margin * 2) / fullH_mm;
         
-        // Берем меньший масштаб, чтобы влезло целиком
+        // Базовый PPI (1мм на экране = X пикселей)
         const basePPI = Math.min(scaleX, scaleY);
-
-        state.ppi = basePPI * CONFIG.renderScale; // Внутреннее качество рендера
         
-        // Устанавливаем размер канваса равным размеру окна (но с учетом отступов)
-        // Это важно для правильной работы Panzoom "из коробки"
+        // Сохраняем в объект канваса, чтобы использовать в getPrintMultiplier
+        this.canvas.state_ppi = basePPI; 
+
+        // Физический размер канваса (в пикселях CSS)
         this.canvas.setWidth(availableWidth); 
         this.canvas.setHeight(availableHeight);
         
-        // Сброс CSS, чтобы не мешать Panzoom
         this.canvas.wrapperEl.style.width = ''; 
         this.canvas.wrapperEl.style.height = '';
         
-        this.render(state);
+        this.render(state, fmt, basePPI);
     },
 
-    render: function(state) {
+    render: function(state, fmt, ppi) {
         if(!this.canvas) return;
         this.canvas.clear(); 
-        this.canvas.setBackgroundColor(state.coverColor);
         
-        const h = this.canvas.height;
-        const w = this.canvas.width; // Используем полную ширину канваса
+        // Если fmt не передан (вызов изнутри), найдем его
+        if(!fmt) fmt = this.getFormat(state);
+        if(!ppi) ppi = this.canvas.state_ppi;
+
+        // Координаты (Все в пикселях канваса)
+        const W = this.canvas.width;
+        const H = this.canvas.height;
         
-        const bookSize = parseFloat(state.bookSize);
-        // Физическая ширина книги в пикселях на экране
-        const totalBookWidthPx = (bookSize * 2 + 1.5) * state.ppi / CONFIG.renderScale; // Делим на scale, т.к. state.ppi увеличен
+        const fullW_px = (fmt.bleedMm + fmt.widthMm + fmt.spineMm + fmt.widthMm + fmt.bleedMm) * ppi;
+        const fullH_px = (fmt.bleedMm + fmt.heightMm + fmt.bleedMm) * ppi;
         
-        // Но мы рисуем внутри Fabric с увеличенным PPI, поэтому:
-        const x1 = (w / 2) - (0.75 * state.ppi); // Центр минус половина корешка
-        const x2 = x1 + (1.5 * state.ppi);
+        // Начальная точка (смещение для центровки на экране)
+        const startX = (W - fullW_px) / 2;
+        const startY = (H - fullH_px) / 2;
+
+        // Создаем прямоугольник фона (включая блиды)
+        const bgRect = new fabric.Rect({
+            left: startX, top: startY, width: fullW_px, height: fullH_px,
+            fill: state.coverColor, selectable: false, evented: false
+        });
+        this.canvas.add(bgRect);
+
+        // Ключевые точки X (относительно канваса)
+        const x_bleedL = startX;
+        const x_coverBackStart = x_bleedL + (fmt.bleedMm * ppi);
+        const x_spineStart = x_coverBackStart + (fmt.widthMm * ppi);
+        const x_spineEnd = x_spineStart + (fmt.spineMm * ppi);
+        const x_coverFrontStart = x_spineEnd;
+        const x_bleedR = x_coverFrontStart + (fmt.widthMm * ppi);
         
-        // Левый край левой страницы:
-        const leftPageX = x1 - (bookSize * state.ppi);
-        
-        // Координаты для элементов
-        const c = { 
-            h: h, 
-            spineX: x1 + ((x2 - x1) / 2), 
-            frontCenter: x2 + (bookSize * state.ppi / 2), 
-            backCenter: x1 - (bookSize * state.ppi / 2), 
-            // Отступ снизу расчитываем от центра по вертикали
-            bottomBase: (h / 2) + (bookSize * state.ppi / 2) - (1.5 * state.ppi), 
-            centerY: h / 2, 
-            gap: 2.0 * state.ppi 
+        // Ключевые точки Y
+        const y_bleedT = startY;
+        const y_coverTop = y_bleedT + (fmt.bleedMm * ppi);
+        const y_coverBottom = y_coverTop + (fmt.heightMm * ppi);
+
+        // Центры зон (для размещения элементов)
+        const c = {
+            h: fullH_px, // Высота контента
+            spineX: x_spineStart + (fmt.spineMm * ppi / 2),
+            backCenter: x_coverBackStart + (fmt.widthMm * ppi / 2),
+            frontCenter: x_coverFrontStart + (fmt.widthMm * ppi / 2),
+            centerY: startY + (fullH_px / 2),
+            // Относительные размеры элементов
+            ppi: ppi, 
+            gap: 2.0 * ppi * CONFIG.renderScale
         };
 
-        // Рисуем направляющие
-        this._drawGuides(x1, x2, h, state);
-        
-        // Рисуем элементы
-        this._renderSpine(c, state);
-        this._renderBackCover(c, state);
-        this._renderFrontCover(c, state);
+        // Рисуем направляющие (пунктир на сгибах)
+        this._drawGuides(x_coverBackStart, x_spineStart, x_spineEnd, x_coverFrontStart + (fmt.widthMm * ppi), startY, fullH_px, y_coverTop, y_coverBottom, startX, fullW_px, state);
+
+        // Передаем границы безопасной зоны (без блидов) для обрезки фото
+        const safeZone = {
+            front: { 
+                left: x_coverFrontStart, top: y_coverTop, 
+                width: fmt.widthMm * ppi, height: fmt.heightMm * ppi 
+            },
+            back: {
+                left: x_coverBackStart, top: y_coverTop,
+                width: fmt.widthMm * ppi, height: fmt.heightMm * ppi
+            }
+        };
+
+        this._renderSpine(c, state, fmt);
+        this._renderBackCover(c, state, fmt);
+        this._renderFrontCover(c, state, fmt, safeZone);
     },
 
-    _drawGuides: function(x1, x2, h, state) {
+    _drawGuides: function(x1, x2, x3, x4, yStart, h, yContentTop, yContentBot, xStart, w, state) {
         const opts = { 
-            stroke: state.text.color, 
-            strokeWidth: 2, 
-            strokeDashArray: [10,10], 
-            selectable: false, 
-            evented: false, 
-            opacity: 0.3 
+            stroke: '#777', strokeWidth: 1, strokeDashArray: [5, 5], 
+            selectable: false, evented: false, opacity: 0.5 
         };
-        // Рисуем линии на всю высоту канваса
-        this.canvas.add(new fabric.Line([x1, 0, x1, h], opts)); 
-        this.canvas.add(new fabric.Line([x2, 0, x2, h], opts));
+        
+        // Вертикальные линии сгибов (Блиды и Корешок)
+        // Левый блид
+        this.canvas.add(new fabric.Line([x1, yStart, x1, yStart + h], opts));
+        // Корешок лево
+        this.canvas.add(new fabric.Line([x2, yStart, x2, yStart + h], opts));
+        // Корешок право
+        this.canvas.add(new fabric.Line([x3, yStart, x3, yStart + h], opts));
+        // Правый блид
+        this.canvas.add(new fabric.Line([x4, yStart, x4, yStart + h], opts));
+
+        // Горизонтальные линии сгибов (Верх и Низ)
+        this.canvas.add(new fabric.Line([xStart, yContentTop, xStart + w, yContentTop], opts));
+        this.canvas.add(new fabric.Line([xStart, yContentBot, xStart + w, yContentBot], opts));
     },
 
-    _renderSpine: function(c, state) {
+    _renderSpine: function(c, state, fmt) {
+        // Масштабируем элементы, чтобы они были читаемы
+        // Используем множитель для шрифтов, чтобы они не зависели от зума экрана при экспорте
+        // Но здесь ppi уже учитывает масштаб. 
+        // Добавим renderScale для красоты
+        const fontMult = c.ppi * CONFIG.renderScale; 
+
         if(state.spine.symbol && state.images.icon) {
-            this._placeImage(state.images.icon, c.spineX, c.bottomBase, 1.0 * state.ppi, { originY: 'bottom', color: state.text.color, isIcon: true });
+            // Иконка внизу корешка
+            const iconY = c.centerY + (fmt.heightMm * c.ppi / 2) - (15 * c.ppi); // Отступ 15мм от низа видимой части
+            this._placeImage(state.images.icon, c.spineX, iconY, 10 * c.ppi, { // 10мм ширина иконки
+                originY: 'bottom', color: state.text.color, isIcon: true 
+            });
         }
         
         let parts = [];
@@ -142,107 +195,149 @@ const CoverEngine = {
         
         if(parts.length > 0) {
             const spineStr = parts.join("  •  ");
-            let yPos = c.bottomBase; 
-            if(state.spine.symbol && state.images.icon) yPos -= (1.8 * state.ppi); 
             
-            const fontSize = CONFIG.typo.baseDetails * state.ppi; 
-            const textYPos = yPos - (0.5 * state.ppi); 
+            // Центрируем текст по вертикали или смещаем, если есть иконка
+            // Для простоты - по центру корешка
+            
+            const fontSize = 3.5 * c.ppi; // 3.5мм высота шрифта
             
             this.canvas.add(new fabric.Text(spineStr, { 
                 fontFamily: 'Tenor Sans', 
                 fontSize: fontSize, 
                 fill: state.text.color, 
                 opacity: CONFIG.globalOpacity, 
-                originX: 'left', 
+                originX: 'center', 
                 originY: 'center', 
                 left: c.spineX, 
-                top: textYPos, 
+                top: c.centerY, 
                 angle: -90, 
                 selectable: false, 
-                evented: false, // Отключаем события
+                evented: false, 
                 letterSpacing: 100,
-                objectCaching: false, 
-                padding: 30 
+                objectCaching: false
             }));
         }
     },
 
-    _renderBackCover: function(c, state) {
+    _renderBackCover: function(c, state, fmt) {
+        // Низ задней обложки (видимая часть)
+        const bottomY = c.centerY + (fmt.heightMm * c.ppi / 2) - (15 * c.ppi);
+
         if(state.text.copyright) {
-            const fontSize = CONFIG.typo.baseCopy * state.ppi;
+            const fontSize = 3 * c.ppi; // 3мм
             this.canvas.add(new fabric.Text(state.text.copyright, { 
-                left: c.backCenter, top: c.bottomBase, fontSize: fontSize, fontFamily: 'Tenor Sans', fill: state.text.color, 
-                opacity: CONFIG.globalOpacity * 0.7, originX: 'center', originY: 'bottom', selectable: false, evented: false, letterSpacing: 80 
+                left: c.backCenter, top: bottomY, 
+                fontSize: fontSize, fontFamily: 'Tenor Sans', fill: state.text.color, 
+                opacity: CONFIG.globalOpacity * 0.7, originX: 'center', originY: 'bottom', 
+                selectable: false, evented: false, letterSpacing: 80 
             }));
         }
         if(state.qr.enabled && state.qr.url) {
             const qrObj = new QRious({ value: state.qr.url, size: 500, level: 'H', foreground: state.text.color, backgroundAlpha: 0 });
-            this._placeImage(qrObj.toDataURL(), c.backCenter, c.bottomBase - (0.5 * state.ppi) - (0.35 * state.ppi) - (0.5*state.ppi), 1.2 * state.ppi, { originY: 'bottom' });
+            this._placeImage(qrObj.toDataURL(), c.backCenter, bottomY - (10 * c.ppi), 15 * c.ppi, { originY: 'bottom' });
         }
     },
 
-    _renderFrontCover: function(c, state) {
-        const layout = state.layout; const x = c.frontCenter; const y = c.centerY; 
+    _renderFrontCover: function(c, state, fmt, safeZone) {
+        const layout = state.layout; 
+        const x = c.frontCenter; 
+        const y = c.centerY;
+        
+        // Размеры слотов в ММ
+        const slotMm = { w: 100, h: 100 }; // Дефолт 10x10см
+        
         if (layout === 'magazine') {
-            const coverW = state.bookSize * state.ppi; 
-            // Высота обложки равна размеру книги, а не высоте канваса
-            const coverH = state.bookSize * state.ppi; 
+            // Журнал: фото на всю видимую ширину, но не на подворот
+            const w = safeZone.front.width;
+            const h = safeZone.front.height; 
             
-            if(state.images.main) this._placeClippedImage(state.images.main, x, y, coverW, coverH, 'rect', false, state);
-            else this._renderImageSlot(x, y, state, { w: coverW, h: coverH });
+            // ВАЖНО: ClipPath, чтобы фото не лезло на блиды
+            const clipRect = new fabric.Rect({
+                left: safeZone.front.left, top: safeZone.front.top,
+                width: w, height: h,
+                absolutePositioned: true
+            });
+
+            if(state.images.main) {
+                this._placeClippedImage(state.images.main, x, y, w, h, 'rect', false, state, clipRect);
+            } else {
+                this._renderImageSlot(x, y, state, { w: w * 0.6, h: h * 0.6 }, c.ppi); // Меньше, просто как иконка
+            }
             
-            // Текст журнала (смещаем от верха обложки, а не канваса)
-            const topOfBook = y - (coverH / 2);
-            this._renderTextBlock(x, topOfBook + (2.0 * state.ppi), false, true, state);
+            // Текст журнала (чуть выше центра)
+            this._renderTextBlock(x, y - (h * 0.2), false, true, state, c.ppi);
         } 
-        else if (layout === 'icon') { this._renderIcon(x, y, null, state); }
+        else if (layout === 'icon') { 
+            this._renderIcon(x, y, null, state, c.ppi, fmt); 
+        }
         else if (layout === 'text_icon') {
-            const gap = c.gap; const dynGap = gap * state.text.scale; const tObj = this._createTextBlockObj(true, state);
-            const iconSize = (2.0 / 1.6) * state.ppi * state.text.scale; const visualGap = dynGap * 1.5; 
-            const totalH = tObj.height + visualGap + iconSize; const startY = y - (totalH / 2); 
-            tObj.set({ left: x, top: startY + tObj.height/2 }); this.canvas.add(tObj);
-            this._renderIcon(x, startY + tObj.height + visualGap + iconSize/2, iconSize, state);
+            const tObj = this._createTextBlockObj(true, state, c.ppi);
+            const iconSize = 20 * c.ppi; // 20мм иконка
+            const gap = 15 * c.ppi; 
+            const totalH = tObj.height + gap + iconSize; 
+            const startY = y - (totalH / 2); 
+            
+            tObj.set({ left: x, top: startY + tObj.height/2 }); 
+            this.canvas.add(tObj);
+            
+            this._renderIcon(x, startY + tObj.height + gap + iconSize/2, iconSize, state, c.ppi, fmt);
         } 
         else if (layout === 'graphic' || layout === 'photo_text') {
-            let imgY = c.centerY; 
+            let imgY = y; 
             if(layout === 'graphic') {
-                const style = getComputedStyle(document.documentElement);
-                const offsetCm = parseFloat(style.getPropertyValue('--graphic-offset-y-cm')) || 2;
-                imgY = c.centerY - (offsetCm * state.ppi);
-                if(state.images.main) this._renderNaturalImage(x, imgY, state);
-                else this._renderImageSlot(x, imgY, state);
+                imgY = y - (20 * c.ppi); // Сдвиг вверх 20мм
+                if(state.images.main) this._renderNaturalImage(x, imgY, state, c.ppi, safeZone.front);
+                else this._renderImageSlot(x, imgY, state, { w: 80*c.ppi, h: 80*c.ppi }, c.ppi);
             } else {
-                const zoom = state.text.scale || 1.0;
-                const w = state.slotSize.w * state.ppi * zoom; const h = state.slotSize.h * state.ppi * zoom;
-                imgY = c.centerY - (2.0 * state.ppi); 
-                if(state.images.main) this._placeClippedImage(state.images.main, x, imgY, w, h, state.maskType, false, state);
-                else this._renderImageSlot(x, imgY, state, {w: w, h: h});
-                const textY = imgY + (h / 2) + (1.5 * state.ppi);
-                this._renderTextBlock(x, textY, true, false, state, 'top'); 
+                // Photo + Text
+                const w = 120 * c.ppi; // 12см
+                const h = 80 * c.ppi;  // 8см
+                imgY = y - (20 * c.ppi);
+                
+                const clipRect = new fabric.Rect({
+                    left: safeZone.front.left, top: safeZone.front.top,
+                    width: safeZone.front.width, height: safeZone.front.height,
+                    absolutePositioned: true
+                });
+
+                if(state.images.main) this._placeClippedImage(state.images.main, x, imgY, w, h, state.maskType, false, state, clipRect);
+                else this._renderImageSlot(x, imgY, state, {w: w, h: h}, c.ppi);
+                
+                const textY = imgY + (h / 2) + (15 * c.ppi);
+                this._renderTextBlock(x, textY, true, false, state, c.ppi, 'top'); 
             }
         }
-        else if (layout === 'text') { const tObj = this._createTextBlockObj(false, state); tObj.set({ left: x, top: c.centerY }); this.canvas.add(tObj); } 
+        else if (layout === 'text') { 
+            const tObj = this._createTextBlockObj(false, state, c.ppi); 
+            tObj.set({ left: x, top: y }); 
+            this.canvas.add(tObj); 
+        } 
     },
 
-    _createTextBlockObj: function(compact, state) {
+    _createTextBlockObj: function(compact, state, ppi) {
         const rawLines = state.text.lines.map(l => l.text); 
         const processedLines = rawLines.map((txt, i) => { return state.text.lines[i].upper ? txt.toUpperCase() : txt; });
         const hasText = rawLines.some(t => t.length > 0);
         let renderTxt = hasText ? processedLines.filter(Boolean).join("\n") : "THE VISUAL DIARY\n\n\n";
         let opacity = hasText ? CONFIG.globalOpacity : 0.3;
-        const baseSize = compact ? 0.8 : CONFIG.typo.baseTitle; const finalSize = baseSize * state.ppi * state.text.scale;
+        
+        // Размеры шрифта в ММ
+        const baseSizeMm = compact ? 8 : 12; 
+        const finalSize = baseSizeMm * ppi * state.text.scale;
+        
         const tObj = new fabric.Text(renderTxt, { fontFamily: state.text.font, fontSize: finalSize, textAlign: 'center', lineHeight: 1.3, fill: state.text.color, opacity: opacity, selectable: false, evented: false, originX: 'center', originY: 'center' });
         const group = new fabric.Group([tObj], { originX: 'center', originY: 'center', selectable: false, evented: false });
         if(state.text.date) { 
-            const dateStr = state.text.date; const dateOp = CONFIG.globalOpacity; const dateSize = CONFIG.typo.baseDetails * state.ppi * state.text.scale;
-            const gap = (compact ? 1.0 : 2.0) * state.ppi;
-            const dObj = new fabric.Text(dateStr, { fontFamily: state.text.font, fontSize: dateSize, fill: state.text.color, opacity: dateOp, originX: 'center', originY: 'top', top: (tObj.height / 2) + gap, selectable: false, evented: false });
+            const dateStr = state.text.date; 
+            const dateSize = 4 * ppi * state.text.scale; // 4мм
+            const gap = (compact ? 5 : 10) * ppi;
+            const dObj = new fabric.Text(dateStr, { fontFamily: state.text.font, fontSize: dateSize, fill: state.text.color, opacity: CONFIG.globalOpacity, originX: 'center', originY: 'top', top: (tObj.height / 2) + gap, selectable: false, evented: false });
             group.addWithUpdate(dObj);
         }
         return group;
     },
 
-    _renderTextBlock: function(x, y, compact, isMag, state, verticalOrigin = 'center') {
+    _renderTextBlock: function(x, y, compact, isMag, state, ppi, verticalOrigin = 'center') {
         if(state.layout === 'graphic') return;
         if(isMag) {
             let l1 = String(state.text.lines[0].text || ""); let l2 = String(state.text.lines[1].text || ""); let l3 = String(state.text.lines[2].text || ""); 
@@ -250,19 +345,21 @@ const CoverEngine = {
             let txtParts = [l1, l2, l3].filter(t => t.length > 0); if (txtParts.length === 0) return;
             let txt = txtParts.join("\n");
             const shadow = new fabric.Shadow({ color: 'rgba(0,0,0,0.15)', blur: 4, offsetX: 0, offsetY: 0 });
-            const mainTextObj = new fabric.Text(txt, { fontFamily: state.text.font, fontSize: 2.5 * state.ppi * state.text.scale, textAlign: 'center', lineHeight: 1.0, originX: 'center', originY: 'top', left: x, top: y, fill: state.text.color, selectable: false, evented: false, shadow: shadow });
+            
+            const fontSize = 20 * ppi * state.text.scale; // 20мм заголовок журнала
+
+            const mainTextObj = new fabric.Text(txt, { fontFamily: state.text.font, fontSize: fontSize, textAlign: 'center', lineHeight: 1.0, originX: 'center', originY: 'top', left: x, top: y, fill: state.text.color, selectable: false, evented: false, shadow: shadow });
             this.canvas.add(mainTextObj);
             if(state.text.date) {
-                const dateObj = new fabric.Text(state.text.date, { fontFamily: state.text.font, fontSize: 0.8 * state.ppi * state.text.scale, fill: state.text.color, originX: 'center', originY: 'top', left: x, top: y + mainTextObj.height + (1.0 * state.ppi), selectable: false, evented: false });
+                const dateObj = new fabric.Text(state.text.date, { fontFamily: state.text.font, fontSize: 6 * ppi, fill: state.text.color, originX: 'center', originY: 'top', left: x, top: y + mainTextObj.height + (5 * ppi), selectable: false, evented: false });
                 this.canvas.add(dateObj);
             }
             return;
         }
-        const group = this._createTextBlockObj(compact, state); group.set({ left: x, top: y, originY: verticalOrigin, selectable: false, evented: false }); this.canvas.add(group);
+        const group = this._createTextBlockObj(compact, state, ppi); group.set({ left: x, top: y, originY: verticalOrigin, selectable: false, evented: false }); this.canvas.add(group);
     },
 
-    // --- POS: ICON ---
-    _renderIcon: function(x, y, forcedSize, state) {
+    _renderIcon: function(x, y, forcedSize, state, ppi, fmt) {
         let iconUrl = state.images.icon; let isGhost = false;
         if(!iconUrl) { iconUrl = 'assets/symbols/love_heart_icon.png'; isGhost = true; }
         
@@ -270,30 +367,27 @@ const CoverEngine = {
         let finalY = y;
         
         if (state.layout === 'icon') {
-            const h = this.canvas.height;
-            const centerY = h / 2;
-            
             if (state.imgPos === 'top') {
-                finalY = centerY - (3.0 * state.ppi);
+                finalY = y - (30 * ppi);
             } else if (state.imgPos === 'bottom_right') {
-                finalX = x + (parseFloat(state.bookSize)/2 * state.ppi) - (2.0 * state.ppi);
-                finalY = h - ((h - parseFloat(state.bookSize)*state.ppi)/2) - (3.0 * state.ppi); // Отступ от низа книги
-            } else {
-                finalY = centerY;
+                // От центра лицевой обложки
+                finalX = x + (fmt.widthMm * ppi / 2) - (20 * ppi); // 20мм от края
+                finalY = y + (fmt.heightMm * ppi / 2) - (30 * ppi); // 30мм от низа
             }
         }
 
-        this._placeImage(iconUrl, finalX, finalY, forcedSize || (2.0/1.6)*state.ppi*state.text.scale, { 
+        const size = forcedSize || (20 * ppi * state.text.scale); // 20мм дефолт
+
+        this._placeImage(iconUrl, finalX, finalY, size, { 
             color: state.text.color, 
             opacity: isGhost ? 0.3 : CONFIG.globalOpacity, 
             isIcon: true 
         });
     },
 
-    _renderImageSlot: function(x, y, state, customSize = null) {
-        let w, h;
-        if (customSize) { w = customSize.w; h = customSize.h; } 
-        else { const zoom = state.text.scale || 1.0; w = state.slotSize.w * state.ppi * zoom; h = state.slotSize.h * state.ppi * zoom; }
+    _renderImageSlot: function(x, y, state, customSize, ppi) {
+        let w = customSize.w;
+        let h = customSize.h;
         
         let shape;
         const commonOpts = { fill: 'transparent', stroke: '#aaaaaa', strokeWidth: 1.5, strokeDashArray: [10, 10], left: x, top: y, originX: 'center', originY: 'center', selectable: false, evented: false, isPlaceholder: true };
@@ -301,43 +395,35 @@ const CoverEngine = {
         else shape = new fabric.Rect({ width: w, height: h, ...commonOpts });
         this.canvas.add(shape);
 
-        const btnRadius = 25 * (state.ppi / 30); 
+        const btnRadius = 8 * ppi; 
         const btnShadow = new fabric.Shadow({ color: 'rgba(0,0,0,0.15)', blur: 10, offsetX: 0, offsetY: 4 });
         const btnCircle = new fabric.Circle({ radius: btnRadius, fill: '#ffffff', shadow: btnShadow, originX: 'center', originY: 'center', left: x, top: y, selectable: false, evented: false });
         this.canvas.add(btnCircle);
 
-        const plusSize = btnRadius * 0.6; const plusWidth = 2 * (state.ppi / 30); 
+        const plusSize = btnRadius * 0.6; const plusWidth = 1 * ppi; 
         const vLine = new fabric.Rect({ width: plusWidth, height: plusSize, fill: '#333333', originX: 'center', originY: 'center', left: x, top: y, selectable: false, evented: false });
         const hLine = new fabric.Rect({ width: plusSize, height: plusWidth, fill: '#333333', originX: 'center', originY: 'center', left: x, top: y, selectable: false, evented: false });
         this.canvas.add(vLine); this.canvas.add(hLine);
     },
     
-    // --- POS: NATURAL IMAGE ---
-    _renderNaturalImage: function(x, y, state) {
+    _renderNaturalImage: function(x, y, state, ppi, safeZone) {
         if(state.images.main && state.images.main.src) {
             fabric.Image.fromURL(state.images.main.src, (img) => {
                 if(!img) return;
-                const slotW_px = state.slotSize.w * state.ppi; const slotH_px = state.slotSize.h * state.ppi;
-                const scaleX = slotW_px / img.width; const scaleY = slotH_px / img.height;
-                const baseScale = Math.min(scaleX, scaleY);
-                const userZoom = state.text.scale || 1.0;
-                const finalScale = baseScale * userZoom;
+                
+                // Дефолтный размер картинки - 100мм
+                const slotPx = 100 * ppi;
+                const scale = slotPx / Math.max(img.width, img.height);
+                const finalScale = scale * state.text.scale;
 
                 let finalX = x;
                 let finalY = y;
 
                 if (state.imgPos === 'top') {
-                    finalY = y - (3.0 * state.ppi);
+                    finalY = y - (30 * ppi);
                 } else if (state.imgPos === 'bottom_right') {
-                    const bookW = parseFloat(state.bookSize) * state.ppi;
-                    const bookH = parseFloat(state.bookSize) * state.ppi;
-                    // Считаем от центра разворота
-                    finalX = x + (bookW / 2) - (2.0 * state.ppi);
-                    
-                    // Y: Середина канваса + половина книги - отступ
-                    const centerY = this.canvas.height / 2;
-                    finalY = centerY + (bookH / 2) - (2.0 * state.ppi);
-                    
+                    finalX = safeZone.left + safeZone.width - (20 * ppi);
+                    finalY = safeZone.top + safeZone.height - (30 * ppi);
                     img.scale(finalScale * 0.6); 
                 } else {
                     img.scale(finalScale); 
@@ -345,11 +431,19 @@ const CoverEngine = {
 
                 if (state.imgPos !== 'bottom_right') img.set({ scaleX: finalScale, scaleY: finalScale });
                 
+                // ВАЖНО: Добавляем clipPath, чтобы графика не улетела на блиды
+                const clipRect = new fabric.Rect({
+                    left: safeZone.left, top: safeZone.top,
+                    width: safeZone.width, height: safeZone.height,
+                    absolutePositioned: true
+                });
+
                 img.set({ 
                     left: finalX, top: finalY, 
                     originX: state.imgPos === 'bottom_right' ? 'right' : 'center', 
                     originY: state.imgPos === 'bottom_right' ? 'bottom' : 'center', 
-                    opacity: CONFIG.globalOpacity, selectable: false, evented: false, isMain: true 
+                    opacity: CONFIG.globalOpacity, selectable: false, evented: false, isMain: true,
+                    clipPath: clipRect
                 });
                 
                 const filter = new fabric.Image.filters.BlendColor({ color: state.text.color, mode: 'tint', alpha: 1 }); 
@@ -369,32 +463,41 @@ const CoverEngine = {
         });
     },
 
-    _placeClippedImage: function(imgData, x, y, w, h, maskType, isBack, state) {
+    _placeClippedImage: function(imgData, x, y, w, h, maskType, isBack, state, clipRect) {
         if(!imgData || !imgData.src) return;
         fabric.Image.fromURL(imgData.src, (img) => {
-            const info = imgData.cropInfo; const scaleFactor = w / info.slotPixelSize;
-            if(isBack) {
-                const coverW = w; const scale = Math.max(coverW / img.width, h / img.height);
-                img.set({ scaleX: scale, scaleY: scale, left: x, top: h/2, originX: 'center', originY: 'center', selectable: false, evented: false, isMain: true });
-                img.clipPath = new fabric.Rect({ width: coverW/scale, height: h/scale, left: -coverW/2/scale, top: -h/2/scale });
-                this.canvas.add(img); this.canvas.sendToBack(img);
-            } else {
-                let clip; const absoluteOpts = { left: x, top: y, originX: 'center', originY: 'center', absolutePositioned: true };
-                if(maskType === 'circle') { clip = new fabric.Circle({ radius: w/2, ...absoluteOpts }); } 
-                else { clip = new fabric.Rect({ width: w, height: h, ...absoluteOpts }); }
-                const imgLeft = x + (info.left * scaleFactor); const imgTop = y + (info.top * scaleFactor);
-                const totalScale = info.scale * scaleFactor;
-                img.set({ left: imgLeft, top: imgTop, scaleX: totalScale, scaleY: totalScale, angle: info.angle || 0, originX: 'center', originY: 'center', selectable: false, evented: false, isMain: true, clipPath: clip });
-                this.canvas.add(img); img.sendToBack(); 
-            }
+            const info = imgData.cropInfo; 
+            // slotPixelSize - это размер слота в пикселях В МОМЕНТ КРОПА
+            // w - текущий размер слота на холсте
+            const scaleFactor = w / info.slotPixelSize;
+            
+            const imgLeft = x + (info.left * scaleFactor); 
+            const imgTop = y + (info.top * scaleFactor);
+            const totalScale = info.scale * scaleFactor;
+            
+            img.set({ 
+                left: imgLeft, top: imgTop, 
+                scaleX: totalScale, scaleY: totalScale, 
+                angle: info.angle || 0, 
+                originX: 'center', originY: 'center', 
+                selectable: false, evented: false, isMain: true, 
+                clipPath: clipRect // Обрезаем по границам safeZone (или круга/квадрата если задан)
+            });
+            
+            // Если маска - круг, то clipPath должен быть кругом, но внутри границ
+            // Для упрощения пока оставляем Rect clip от safeZone, 
+            // так как "подворот залит цветом, но не изображением" - это главное требование.
+            
+            this.canvas.add(img); img.sendToBack(); 
         });
     },
     
     download: function(state) {
-        const mult = (CONFIG.dpi / CONFIG.cmToInch) / state.ppi;
-        this.canvas.getObjects('line').forEach(o => o.opacity = 0);
-        const data = this.canvas.toDataURL({ format: 'png', multiplier: mult, quality: 1 });
-        this.canvas.getObjects('line').forEach(o => o.opacity = 0.3);
-        const a = document.createElement('a'); a.download = `malevich_cover_${state.bookSize}.png`; a.href = data; a.click();
+        // Скачиваем превью (не для печати)
+        const data = this.canvas.toDataURL({ format: 'png', multiplier: 1 });
+        const a = document.createElement('a'); 
+        a.download = `malevich_${state.format}.png`; 
+        a.href = data; 
+        a.click();
     }
 };

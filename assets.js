@@ -1,22 +1,48 @@
-// assets.js - FIXED GLOBAL SCOPE V96
+/* assets.js - GLOBAL DATA V97 (Formats & Bleeds) */
 
-// 1. СИМВОЛЫ И ГРАФИКА (Делаем глобальными через window)
+// 1. ФОРМАТЫ КНИГ (РАЗМЕРЫ В ММ)
+window.BOOK_FORMATS = {
+    '30x30': {
+        name: '30x30',
+        label: '30x30',
+        widthMm: 303,   // Ширина одной сторонки
+        heightMm: 303,  // Высота одной сторонки
+        spineMm: 20,    // Корешок
+        bleedMm: 15     // Подворот (Wraparound)
+    },
+    '25x25': {
+        name: '25x25',
+        label: '25x25',
+        widthMm: 253,
+        heightMm: 253,
+        spineMm: 20,
+        bleedMm: 15
+    },
+    '20x20': {
+        name: '20x20',
+        label: '20x20',
+        widthMm: 203,
+        heightMm: 203,
+        spineMm: 20,
+        bleedMm: 15
+    }
+    // Сюда легко добавить новый формат, например '30x20'
+};
+
+// 2. СИМВОЛЫ И ГРАФИКА
 window.ASSETS_DB = {
-    // Папка: assets/symbols
     symbols: {
         "Love symbols": ["love_heart.png"],
         "Games symbols": ["games_ghost.png"],
         "Test symbols": ["test_2x2.png"] 
     },
-
-    // Папка: assets/graphics
     graphics: {
         "Test graphics": ["test_29x29.png", "test_12x12.png", "test_2x2.png"],
         "Love graphics": ["love_heart.png"] 
     }
 };
 
-// 2. ДИЗАЙНЕРСКИЕ ПАЛИТРЫ (Тренды)
+// 3. ПАЛИТРЫ
 window.DESIGNER_PALETTES = {
     'Kinfolk - Cinema': [
         { bg: '#556B2F', text: '#F5F5DC' }, { bg: '#8B4513', text: '#FAEBD7' },
