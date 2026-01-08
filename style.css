@@ -235,54 +235,65 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px
 }
 
 /* --- COVER DOCK (BOTTOM PANEL) --- */
-/* --- STYLISH COVER DOCK --- */
+/* --- COVER DOCK V2 --- */
 #coverDock {
     position: absolute;
-    bottom: 20px; /* Отступ от самого низа для "парящего" эффекта */
+    bottom: 25px;
     left: 50%;
     transform: translateX(-50%);
-    width: 95%; /* Не на всю ширину, а аккуратно */
-    max-width: 600px; /* Ограничение ширины на десктопе */
+    width: 95%;
+    max-width: 700px;
     height: 60px;
-    background: rgba(30, 30, 30, 0.95); /* Темный фон */
-    backdrop-filter: blur(12px); /* Размытие фона */
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 30px; /* Сильное скругление (Pill shape) */
+    background: rgba(30, 30, 30, 0.9);
+    backdrop-filter: blur(15px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 0 10px;
     z-index: 900;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.4);
     pointer-events: auto;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
 }
 
-.dock-section {
+.dock-section { flex: 1; display: flex; align-items: center; }
+.dock-section.left { justify-content: flex-start; }
+.dock-section.center { justify-content: center; }
+.dock-section.right { justify-content: flex-end; }
+
+/* Группа кнопок (Зум / Позиция) */
+.zoom-group, .pos-group {
     display: flex;
-    align-items: center;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 12px;
+    padding: 2px;
+    border: 1px solid rgba(255,255,255,0.1);
 }
-.dock-section.left, .dock-section.right { width: 50px; justify-content: center; }
-.dock-section.center { flex: 1; justify-content: center; gap: 10px; }
 
-/* Круглые иконки по бокам */
-.dock-icon-btn {
-    width: 42px;
-    height: 42px;
-    border-radius: 50%;
+.dock-mini-btn {
+    width: 32px;
+    height: 32px;
     background: transparent;
     border: none;
-    color: #aaa;
+    color: #888;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 10px;
     display: grid;
     place-items: center;
-    cursor: pointer;
-    transition: all 0.2s ease;
+    transition: 0.2s;
+    font-family: 'Roboto', sans-serif;
 }
-.dock-icon-btn svg { width: 24px; height: 24px; fill: currentColor; }
-.dock-icon-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
+#btnZoomReset { width: auto; padding: 0 8px; font-size: 11px; letter-spacing: 0.5px; }
 
-/* Центральные кнопки действий (Pills) */
+.dock-mini-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
+.dock-mini-btn.active { background: #555; color: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+
+/* Главная кнопка */
 .dock-main-btn {
-    background: #e0e0e0; /* Светлая кнопка для контраста */
+    background: #e0e0e0;
     color: #000;
     border: none;
     height: 40px;
@@ -291,35 +302,25 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 13px;
-    font-weight: 600;
+    font-size: 12px;
+    font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     cursor: pointer;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-    transition: transform 0.2s, background 0.2s;
-    font-family: 'Roboto', sans-serif;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    transition: transform 0.2s;
+    white-space: nowrap;
 }
 .dock-main-btn svg { width: 18px; height: 18px; fill: currentColor; }
-.dock-main-btn:hover { background: #fff; transform: translateY(-2px); }
-.dock-main-btn:active { transform: scale(0.96); }
+.dock-main-btn:active { transform: scale(0.95); }
 
 /* Скрываем старое */
-#photoTrigger, #canvasActions { display: none !important; }
+#photoTrigger, #canvasActions, #previewControls, #fullscreenBtn { display: none !important; }
 
 /* Адаптация */
 @media (max-width: 600px) {
-    #coverDock {
-        bottom: 15px;
-        width: 92%;
-        height: 55px;
-    }
-    .dock-main-btn {
-        padding: 0 15px;
-        font-size: 12px;
-    }
-    .dock-main-btn span {
-        /* На совсем узких экранах можно убрать текст */
-        /* display: none; */
-    }
+    #coverDock { bottom: 15px; width: 94%; height: 55px; padding: 0 5px; }
+    .dock-main-btn { padding: 0 15px; font-size: 11px; }
+    .dock-mini-btn { width: 28px; height: 28px; font-size: 12px; }
+    #btnZoomReset { font-size: 10px; }
 }

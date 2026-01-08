@@ -1,4 +1,4 @@
-/* app.js - FINAL WITH ASSET PANEL & TELEGRAM V95 */
+/* app.js - FINAL V99: Zoom Dock, No Touch, Fit Screen */
 
 // Глобальные переменные
 let state = {
@@ -14,7 +14,7 @@ let state = {
 };
 
 let userModifiedText = false;
-let panzoomInstance = null;
+let workspacePanzoom = null; // Экземпляр Panzoom
 
 // =========================================================
 // 1. ГЛАВНЫЙ ЗАПУСК
@@ -31,14 +31,16 @@ window.onload = function() {
         }
     }, 1000);
 
+    // Проверка движка
     if (typeof CoverEngine === 'undefined') {
         alert("Critical Error: CoverEngine not loaded.");
         return;
     }
 
+    // Инициализация (Без событий мыши на холсте)
     CoverEngine.init('c');
 
-    // Параметры из ссылки
+    // Параметры из URL
     const urlParams = new URLSearchParams(window.location.search);
     const currentYear = new Date().getFullYear().toString();
     state.text.date = currentYear;
@@ -53,26 +55,37 @@ window.onload = function() {
         if (inp) inp.value = nameFromUrl.toUpperCase();
     }
 
+    // Загрузка ресурсов
     loadDefaultAssets();
     initColors();
     initListeners();
-    initMobilePreview();
 
+    // Первый рендер и инициализация Зума
     setTimeout(() => {
         refresh();
-        checkOrientation();
+        initWorkspaceZoom();
         updateActionButtons();
     }, 500);
 };
 
+// Перерисовка при ресайзе окна
 window.addEventListener('resize', () => {
     if (document.activeElement.tagName === 'INPUT') return;
     setTimeout(() => {
         refresh();
-        checkOrientation();
+        // При ресайзе сбрасываем зум, чтобы пересчитать Fit
+        if(workspacePanzoom) {
+            workspacePanzoom.reset();
+            // Небольшой хак для центровки после ресета
+            setTimeout(() => {
+                 const canvasContainer = document.querySelector('.canvas-container');
+                 if(canvasContainer) canvasContainer.style.transform = 'none';
+            }, 50);
+        }
     }, 100);
 });
 
+// Главная функция обновления
 function refresh() {
     if (typeof CoverEngine !== 'undefined') {
         const workspace = document.getElementById('workspace');
@@ -80,70 +93,111 @@ function refresh() {
     }
 }
 
-function loadDefaultAssets() {
-    const defaultPath = 'assets/symbols/love_heart.png';
-    const defaultPreview = 'assets/symbols/love_heart_icon.png';
-
-    if(typeof CoverEngine !== 'undefined') {
-        CoverEngine.loadSimpleImage(defaultPath, (url) => {
-            const final = url || defaultPreview;
-            if (final) {
-                CoverEngine.loadSimpleImage(final, (valid) => {
-                    if (valid) state.images.icon = valid;
-                    finishInit();
-                });
-            } else { finishInit(); }
-        });
-    } else { finishInit(); }
-}
-
-function finishInit() {
-    updateSymbolUI();
-    const defCard = document.querySelector('.layout-card[title="Текст+Символ"]') || document.querySelector('.layout-card');
-    if (defCard) setLayout('text_icon', defCard);
-    refresh();
-}
-
 // =========================================================
-// 2. ASSET PANEL & POS LOGIC (NEW)
+// 2. ЛОГИКА ЗУМА И ПАНЕЛИ (DOCK)
 // =========================================================
 
-// Открытие панели при клике на холст
-window.handleCanvasClick = (objType) => {
-    if (state.layout === 'text') return; // В текстовом режиме нет картинок
-
-    const modal = document.getElementById('assetSettingsModal');
-    modal.classList.remove('hidden');
+function initWorkspaceZoom() {
+    const workspaceEl = document.getElementById('workspace');
+    // Fabric.js оборачивает canvas в .canvas-container
+    const canvasContainer = workspaceEl.querySelector('.canvas-container');
     
-    // Обновляем UI кнопок
-    document.querySelectorAll('.pos-btn').forEach(b => b.classList.remove('active'));
-    const activeBtn = document.getElementById(`posBtn_${state.imgPos}`);
-    if(activeBtn) activeBtn.classList.add('active');
-};
+    if (canvasContainer && window.Panzoom) {
+        // Уничтожаем старый, если был (на всякий случай)
+        if (workspacePanzoom) workspacePanzoom.destroy();
 
-window.closeAssetSettings = () => {
-    document.getElementById('assetSettingsModal').classList.add('hidden');
-};
+        workspacePanzoom = Panzoom(canvasContainer, {
+            maxScale: 3,
+            minScale: 0.8,
+            startScale: 1, // 1 = Идеально вписанный размер (расчитан в CoverEngine)
+            contain: null, // Разрешаем свободное перемещение
+            canvas: false  // Это HTML элемент (div)
+        });
+        
+        // Зум колесиком мыши
+        workspaceEl.addEventListener('wheel', workspacePanzoom.zoomWithWheel);
+        
+        // Подсветка кнопки 100%
+        canvasContainer.addEventListener('panzoomchange', (e) => {
+            const scale = e.detail.scale;
+            const btn100 = document.getElementById('btnZoomReset');
+            if(btn100) {
+                // Если масштаб почти 1, светим кнопку
+                if (scale >= 0.95 && scale <= 1.05) btn100.classList.add('active');
+                else btn100.classList.remove('active');
+            }
+        });
+    }
+}
 
-window.triggerAssetAction = (action) => {
-    window.closeAssetSettings();
-    if (action === 'upload') {
-        document.getElementById('imageLoader').click();
-    } else if (action === 'gallery') {
-        const type = (state.layout === 'icon' || state.layout === 'text_icon') ? 'symbols' : 'graphics';
-        openGallery(type, state.layout === 'text_icon' ? 'global' : 'main');
+// Управление зумом с кнопок
+window.zoomCanvas = (action) => {
+    if (!workspacePanzoom) return;
+    
+    if (action === 'in') workspacePanzoom.zoomIn();
+    else if (action === 'out') workspacePanzoom.zoomOut();
+    else if (action === 'reset') {
+        workspacePanzoom.reset(); 
+        // Принудительный сброс трансформации для идеального центра
+        setTimeout(() => {
+             const canvasContainer = document.querySelector('.canvas-container');
+             if(canvasContainer) {
+                 canvasContainer.style.transform = 'scale(1) translate(0px, 0px)';
+                 canvasContainer.style.transformOrigin = '50% 50%';
+             }
+             // Обновляем состояние Panzoom
+             workspacePanzoom.reset(); 
+        }, 10);
     }
 };
 
+// Установка позиции картинки (Верх / Центр / Угол)
 window.setImgPos = (pos) => {
     state.imgPos = pos;
-    document.querySelectorAll('.pos-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById(`posBtn_${pos}`).classList.add('active');
+    // Обновляем UI кнопок в доке
+    document.querySelectorAll('#posGroup .dock-mini-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById(`dockPos_${pos}`);
+    if(btn) btn.classList.add('active');
     refresh();
 };
 
+// Обновление видимости кнопок в Доке
+window.updateActionButtons = function() {
+    const btnGallery = document.getElementById('btnDockGallery');
+    const btnUpload = document.getElementById('btnDockUpload');
+    const posGroup = document.getElementById('posGroup');
+    
+    if (!btnGallery) return;
+    
+    // Сброс
+    btnGallery.classList.add('hidden');
+    btnUpload.classList.add('hidden');
+    if(posGroup) posGroup.classList.add('hidden');
+    
+    // Логика
+    if (state.layout === 'graphic') {
+        btnGallery.classList.remove('hidden');
+        btnGallery.querySelector('span').innerText = "Галерея";
+        if(posGroup) posGroup.classList.remove('hidden'); // Графику можно двигать
+    } 
+    else if (state.layout === 'photo_text' || state.layout === 'magazine') {
+        btnUpload.classList.remove('hidden');
+        // Фото+Текст можно двигать, Журнал - нет (он на весь экран)
+        if(state.layout === 'photo_text' && posGroup) posGroup.classList.remove('hidden');
+    }
+    else if (state.layout === 'icon' || state.layout === 'text_icon') {
+        btnGallery.classList.remove('hidden');
+        btnGallery.querySelector('span').innerText = "Символ";
+        // Иконку (если layout=icon) можно двигать, текст+иконка - нет
+        if(state.layout === 'icon' && posGroup) posGroup.classList.remove('hidden');
+    }
+};
+
+// Заглушка для старого хендлера (клики по холсту отключены)
+window.handleCanvasClick = () => {}; 
+
 // =========================================================
-// 3. TELEGRAM SEND (300 DPI)
+// 3. ОТПРАВКА В TELEGRAM (300 DPI)
 // =========================================================
 window.sendToTelegram = function() {
     const btn = document.getElementById('sendTgBtn');
@@ -166,6 +220,7 @@ window.sendToTelegram = function() {
                 throw new Error("Canvas Error: Engine not loaded");
             }
 
+            // Расчет множителя для 300 DPI
             const targetPPI = 300 / 2.54; 
             const exportMultiplier = targetPPI / state.ppi;
             console.log(`Generating 300 DPI. Multiplier: ${exportMultiplier.toFixed(2)}`);
@@ -215,8 +270,32 @@ window.sendToTelegram = function() {
 };
 
 // =========================================================
-// 4. INTERFACE
+// 4. ЗАГРУЗКА АССЕТОВ И ИНТЕРФЕЙС
 // =========================================================
+
+function loadDefaultAssets() {
+    const defaultPath = 'assets/symbols/love_heart.png';
+    const defaultPreview = 'assets/symbols/love_heart_icon.png';
+
+    if(typeof CoverEngine !== 'undefined') {
+        CoverEngine.loadSimpleImage(defaultPath, (url) => {
+            const final = url || defaultPreview;
+            if (final) {
+                CoverEngine.loadSimpleImage(final, (valid) => {
+                    if (valid) state.images.icon = valid;
+                    finishInit();
+                });
+            } else { finishInit(); }
+        });
+    } else { finishInit(); }
+}
+
+function finishInit() {
+    updateSymbolUI();
+    const defCard = document.querySelector('.layout-card[title="Текст+Символ"]') || document.querySelector('.layout-card');
+    if (defCard) setLayout('text_icon', defCard);
+    refresh();
+}
 
 function initColors() {
     const collectionName = 'Kinfolk - Cinema';
@@ -354,7 +433,8 @@ function loadGal(type, cat, target) {
                     } else if (type === 'graphics') {
                         state.images.main = { src: final, natural: true };
                         refresh();
-                        // Не вызываем updateActionButtons, чтобы не прятать кнопки
+                        // Не скрываем кнопки, обновление само произойдет
+                        updateActionButtons();
                     }
                 });
             }
@@ -362,29 +442,6 @@ function loadGal(type, cat, target) {
         grid.appendChild(item);
     });
 }
-
-// Утилиты UI
-window.updateActionButtons = function() {
-    const btnGallery = document.getElementById('btnDockGallery');
-    const btnUpload = document.getElementById('btnDockUpload');
-    
-    if (!btnGallery || !btnUpload) return;
-    
-    // Сначала скрываем обе
-    btnGallery.classList.add('hidden');
-    btnUpload.classList.add('hidden');
-    
-    // Логика показа
-    if (state.layout === 'graphic') {
-        // Для графики нужна галерея
-        btnGallery.classList.remove('hidden');
-    } 
-    else if (state.layout === 'photo_text' || state.layout === 'magazine') {
-        // Для фото-режимов нужна загрузка
-        btnUpload.classList.remove('hidden');
-    }
-    // Для текстовых режимов и иконок панель будет пустой (только фулскрин)
-};
 
 window.closeGallery = () => document.getElementById('galleryModal').classList.add('hidden');
 window.openQRModal = () => document.getElementById('qrModal').classList.remove('hidden');
@@ -439,6 +496,7 @@ function initListeners() {
                 if (state.layout === 'graphic') {
                     state.images.main = { src: url, natural: true };
                     refresh();
+                    updateActionButtons();
                 } else {
                     document.getElementById('cropperModal').classList.remove('hidden');
                     updateCropperUI();
@@ -521,7 +579,7 @@ function updateCropperUI() {
 }
 
 // =========================================================
-// 5. GLOBAL UI HELPERS
+// 5. ГЛОБАЛЬНЫЕ UI ХЕЛПЕРЫ
 // =========================================================
 
 window.toggleCase = (i) => {
@@ -565,11 +623,6 @@ window.setLayout = (l, btn) => {
     updateActionButtons();
 };
 
-window.handleCanvasClick = (objType) => {
-    // В новой версии эта функция переопределена выше (в секции 2)
-    // Но оставим заглушку на всякий случай
-};
-
 window.setBookSize = (s, btn) => {
     state.bookSize = s;
     document.querySelectorAll('.format-card').forEach(b => b.classList.remove('active'));
@@ -592,52 +645,5 @@ window.setScale = (s) => {
 };
 
 window.triggerAssetLoader = () => {
-    // Новая логика через Bottom Sheet
-    const modal = document.getElementById('assetSettingsModal');
-    modal.classList.remove('hidden');
-};
-
-// =========================================================
-// 6. MOBILE PREVIEW
-// =========================================================
-function initMobilePreview() {
-    const container = document.getElementById('panzoomContainer');
-    const closeBtn = document.getElementById('closePreviewBtn');
-    if (window.Panzoom && container) {
-        panzoomInstance = Panzoom(container, { maxScale: 4, minScale: 0.8, contain: null, canvas: true });
-        container.parentElement.addEventListener('wheel', panzoomInstance.zoomWithWheel);
-    }
-    if (closeBtn) closeBtn.onclick = (e) => { e.stopPropagation(); closeMobilePreview(); };
-    
-    document.getElementById('btnZoomIn').onclick = (e) => { e.stopPropagation(); panzoomInstance.zoomIn(); };
-    document.getElementById('btnZoomOut').onclick = (e) => { e.stopPropagation(); panzoomInstance.zoomOut(); };
-    document.getElementById('btnZoomFit').onclick = (e) => { e.stopPropagation(); panzoomInstance.reset(); };
-}
-
-function checkOrientation() {
-    if (document.activeElement.tagName === 'INPUT' || document.body.classList.contains('keyboard-open')) return;
-    const isMobileDevice = window.innerWidth < 1024;
-    if (isMobileDevice) {
-        if (window.innerWidth > window.innerHeight) {
-            if (document.getElementById('mobilePreview').classList.contains('hidden')) openMobilePreview();
-        } else {
-            closeMobilePreview();
-        }
-    }
-}
-
-window.openMobilePreview = () => {
-    const modal = document.getElementById('mobilePreview');
-    const img = document.getElementById('mobilePreviewImg');
-    if (typeof CoverEngine !== 'undefined') {
-        const mult = window.innerWidth < 1024 ? 1.5 : 2.5;
-        const dataUrl = CoverEngine.canvas.toDataURL({ format: 'png', multiplier: mult });
-        img.src = dataUrl;
-        modal.classList.remove('hidden');
-        if (panzoomInstance) { setTimeout(() => { panzoomInstance.reset(); }, 50); }
-    }
-};
-
-window.closeMobilePreview = () => {
-    document.getElementById('mobilePreview').classList.add('hidden');
+    // Больше не используется, но оставим как заглушку
 };

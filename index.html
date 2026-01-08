@@ -29,9 +29,11 @@
         
         <div id="coverDock">
             <div class="dock-section left">
-                <button class="dock-icon-btn" onclick="if(panzoomInstance) panzoomInstance.reset()" title="Сбросить зум">
-                    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5-8h10v0M12 7v10"/></svg>
-                </button>
+                <div class="zoom-group">
+                    <button class="dock-mini-btn" onclick="zoomCanvas('out')">−</button>
+                    <button class="dock-mini-btn active" id="btnZoomReset" onclick="zoomCanvas('reset')">100%</button>
+                    <button class="dock-mini-btn" onclick="zoomCanvas('in')">+</button>
+                </div>
             </div>
 
             <div class="dock-section center">
@@ -42,14 +44,16 @@
 
                 <button id="btnDockUpload" class="dock-main-btn hidden" onclick="document.getElementById('imageLoader').click()">
                     <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-                    <span>Добавить фото</span>
+                    <span>Загрузить</span>
                 </button>
             </div>
 
             <div class="dock-section right">
-                <button class="dock-icon-btn" onclick="openMobilePreview()" title="Просмотр">
-                    <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
-                </button>
+                <div id="posGroup" class="pos-group hidden">
+                    <button class="dock-mini-btn" onclick="setImgPos('top')" id="dockPos_top" title="Верх">↑</button>
+                    <button class="dock-mini-btn active" onclick="setImgPos('center')" id="dockPos_center" title="Центр">●</button>
+                    <button class="dock-mini-btn" onclick="setImgPos('bottom_right')" id="dockPos_bottom_right" title="Угол">↘</button>
+                </div>
             </div>
         </div>
     </div>
