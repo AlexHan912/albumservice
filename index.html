@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MALEVICH | Configurator V95</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400..900;1,6..96,400..900&family=Roboto:wght@300;400;500;700&family=Tenor+Sans&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="style.css?v=95">
+    
+    <script src="assets.js"></script>
+</head>
+<body oncontextmenu="return false;">
+
+    <div id="app-loader">
+        <div class="loader-text">MALEVICH</div>
+        <div class="loader-sub">EST. 2025</div>
+    </div>
+
+<div id="workspace">
+        <canvas id="c"></canvas>
+        
+        <div id="coverDock">
+            <div class="dock-section left"></div>
+
+            <div class="dock-section center">
+                <button id="btnDockGallery" class="dock-btn hidden" onclick="openGallery('graphics', 'main')">
+                    <svg viewBox="0 0 24 24"><path d="M22 16V4c0-1.1-.9-2-2-2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2zm-11-4l2.03 2.71L16 11l4 5H8l3-4zM2 6v14c0 1.1.9 2 2 2h14v-2H4V6H2z"/></svg>
+                    <span>Галерея</span>
+                </button>
+
+                <button id="btnDockUpload" class="dock-btn hidden" onclick="document.getElementById('imageLoader').click()">
+                    <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5z"/></svg>
+                    <span>Загрузить фото</span>
+                </button>
+            </div>
+
+            <div class="dock-section right">
+                <button class="dock-icon-btn" onclick="openMobilePreview()" title="На весь экран">
+                    <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="controls">
+        <h1>MALEVICH</h1>
+        
+        <div class="section">
+            <h2>1. Название Книги</h2>
+            <div id="textBuilder">
+                <div class="text-row" id="row1">
+                    <input type="text" id="inputLine1" value="THE VISUAL DIARY" placeholder="Название" enterkeyhint="done">
+                    <div class="tool-btn" onclick="toggleCase(1)" id="btnTt1">Tt</div>
+                    <div class="tool-btn" onclick="addSmartRow()" title="Добавить строку">+</div>
+                </div>
+
+                <div class="text-row hidden" id="row2">
+                    <input type="text" id="inputLine2" placeholder="Доп. строка" enterkeyhint="done">
+                    <div class="tool-btn" onclick="toggleCase(2)" id="btnTt2">Tt</div>
+                    <div class="tool-btn red" onclick="hideRow(2)">×</div>
+                </div>
+
+                <div class="text-row hidden" id="row3">
+                    <input type="text" id="inputLine3" placeholder="Доп. строка" enterkeyhint="done">
+                    <div class="tool-btn" onclick="toggleCase(3)" id="btnTt3">Tt</div>
+                    <div class="tool-btn red" onclick="hideRow(3)">×</div>
+                </div>
+
+                <label style="margin-top:10px;">Символ и Дата</label>
+                <div class="input-row-icon">
+                    <div id="globalSymbolBtn" class="icon-trigger-btn pulse-attention" onclick="openGallery('symbols', 'global')"></div>
+                    <input type="text" id="dateLine" value="" placeholder="Год" style="margin-bottom:0;" enterkeyhint="done">
+                </div>
+            </div>
+            <input type="file" id="imageLoader" hidden accept="image/*, .heic">
+            <input type="file" id="iconLoader" hidden accept="image/png">
+        </div>
+
+        <div class="section">
+            <h2>2. Размер книги и шрифт</h2>
+            <div class="format-selector">
+                <div class="format-card f-30 active" onclick="setBookSize(30, this)"><span>30x30</span></div>
+                <div class="format-card f-25" onclick="setBookSize(25, this)"><span>25x25</span></div>
+                <div class="format-card f-20" onclick="setBookSize(20, this)"><span>20x20</span></div>
+            </div>
+            <div class="typo-row">
+                <div class="typo-col">
+                    <select id="fontSelector" style="margin:0;">
+                        <option value="Tenor Sans">Tenor Sans</option>
+                        <option value="Bodoni Moda">Bodoni Moda</option>
+                    </select>
+                </div>
+                <div class="typo-col">
+                    <div class="scale-control">
+                        <span class="scale-label" onclick="setScale(0.5, this)">S</span>
+                        <div class="scale-track">
+                            <input type="range" id="textScale" min="1" max="5" value="3" step="1" oninput="window.updateScaleFromSlider(this.value)">
+                        </div>
+                        <span class="scale-label" onclick="setScale(1.5, this)">XL</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>3. Цветовая палитра</h2>
+            <select id="paletteSelector" class="palette-selector" onchange="changeCollection(this.value)">
+                <option value="Wedding Trends">Wedding Trends</option>
+                <option value="New Born">New Born Trends</option>
+                <option value="Pantone Trends">Pantone Trends</option>
+                <option value="Kinfolk - Cinema">Kinfolk - Cinema</option>
+                <option value="Fashion Magazine">Fashion Magazine</option>
+                <option value="Avant-Garde">Yayoi Kusama Avant-Garde</option>
+                <option value="Custom">Выбрать свои цвета...</option>
+            </select>
+            <div id="pairsGrid" class="pairs-grid"></div>
+            <div id="customPickers" class="hidden">
+                <label>Цвет Обложки</label>
+                <input type="color" id="customCoverPicker" value="#FFFFFF">
+                <label>Цвет Элементов</label>
+                <input type="color" id="customTextPicker" value="#1a1a1a">
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>4. Дизайн Обложки</h2>
+            <div class="layout-grid">
+                <div class="layout-card" onclick="setLayout('icon', this)" title="Символ">
+                    <div class="mini-icon">❤</div>
+                </div>
+                <div class="layout-card active" onclick="setLayout('text_icon', this)" title="Текст+Символ">
+                    <div class="mini-group">
+                        <div class="mini-line"></div>
+                        <div class="mini-line short"></div>
+                    </div>
+                    <div class="mini-icon" style="margin-top:2px">❤</div>
+                </div>
+                <div class="layout-card" onclick="setLayout('graphic', this)" title="Графика">
+                    <div class="mini-graphic-symbol">⌘</div>
+                </div>
+                <div class="layout-card" onclick="setLayout('text', this)" title="Текст">
+                    <div class="mini-group" style="gap:6px">
+                        <div class="mini-line"></div>
+                        <div class="mini-line"></div>
+                        <div class="mini-line short"></div>
+                    </div>
+                </div>
+                <div class="layout-card" onclick="setLayout('photo_text', this)" title="Фото+Текст">
+                    <div class="mini-dashed-rect"></div>
+                    <div class="mini-line short" style="margin-top:4px"></div>
+                </div>
+                <div class="layout-card" onclick="setLayout('magazine', this)" title="Журнал">
+                    <div class="mini-mag-container">
+                        <div class="mini-mag-title"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>5. Детали</h2>
+            <label>Корешок (Элементы)</label>
+            <div class="spine-controls">
+                <div id="btnSpineSymbol" class="spine-btn active" onclick="toggleSpinePart('symbol')">❤</div>
+                <div id="btnSpineTitle" class="spine-btn active" onclick="toggleSpinePart('title')">Название</div>
+                <div id="btnSpineDate" class="spine-btn active" onclick="toggleSpinePart('date')">Дата</div>
+            </div>
+
+            <label>Копирайт / QR</label>
+            <div class="input-row-icon">
+                <div id="qrBtn" class="icon-trigger-btn" style="font-size:12px;" onclick="openQRModal()">QR</div>
+                <input type="text" id="copyrightInput" value="" placeholder="Photo by..." style="margin-bottom:0;" enterkeyhint="done">
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button id="saveBtn" style="flex: 1;">СКАЧАТЬ</button>
+            <button id="sendTgBtn" style="flex: 1; background: #0088cc; color: white;" onclick="sendToTelegram()">ОТПРАВИТЬ ЗАКАЗ</button>
+        </div>
+        
+        <div id="debugInfo" style="font-size:9px; color:#555; text-align:center; margin-top:10px;"></div>
+    </div>
+
+    <div id="mobilePreview" class="hidden">
+        <div id="panzoomContainer">
+            <img id="mobilePreviewImg" src="" alt="Preview">
+        </div>
+        <div id="previewControls">
+            <button id="closePreviewBtn">←</button>
+            <div class="divider"></div>
+            <div class="zoom-actions">
+                <button id="btnZoomOut">−</button>
+                <button id="btnZoomFit">100%</button>
+                <button id="btnZoomIn">+</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="assetSettingsModal" class="modal-overlay hidden" onclick="if(event.target===this) closeAssetSettings()">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span style="font-size:14px; text-transform:uppercase; letter-spacing:1px;">Настройка</span>
+                <span class="modal-close" onclick="closeAssetSettings()">×</span>
+            </div>
+
+            <div class="asset-actions">
+                <button class="asset-btn" onclick="triggerAssetAction('upload')">
+                    <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5z"/></svg>
+                    Загрузить фото
+                </button>
+                <button class="asset-btn" onclick="triggerAssetAction('gallery')">
+                    <svg viewBox="0 0 24 24"><path d="M22 16V4c0-1.1-.9-2-2-2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2zm-11-4l2.03 2.71L16 11l4 5H8l3-4zM2 6v14c0 1.1.9 2 2 2h14v-2H4V6H2z"/></svg>
+                    Выбрать из галереи
+                </button>
+            </div>
+
+            <label style="text-align:center; margin-bottom:10px;">Позиция</label>
+            <div class="pos-grid">
+                <div class="pos-btn" onclick="setImgPos('top')" id="posBtn_top" title="Выше центра">
+                    <div style="display:flex; flex-direction:column; align-items:center; gap:2px;">
+                        <div style="width:10px; height:1px; background:currentColor"></div>
+                        <div style="width:4px; height:4px; background:currentColor; border-radius:50%"></div>
+                    </div>
+                </div>
+                <div class="pos-btn active" onclick="setImgPos('center')" id="posBtn_center" title="По центру">
+                    <div class="icon-pos-center"></div>
+                </div>
+                <div class="pos-btn" onclick="setImgPos('bottom_right')" id="posBtn_bottom_right" title="Нижний правый угол">
+                    <div style="position:relative; width:100%; height:100%;">
+                        <div style="position:absolute; bottom:6px; right:6px; width:4px; height:4px; background:currentColor;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="cropperModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">Кадрирование</div>
+            <div class="crop-controls">
+                <button class="crop-btn active" onclick="setCropMask(6,6)" title="Квадрат 6x6"><div class="crop-shape shape-sq"></div></button>
+                <button class="crop-btn" onclick="setCropMask(4,6)" title="Портрет 4x6"><div class="crop-shape shape-v"></div></button>
+                <button class="crop-btn" onclick="setCropMask(6,4)" title="Альбом 6x4"><div class="crop-shape shape-h"></div></button>
+                <button class="crop-btn" onclick="setCropMask('circle')" title="Круг"><div class="crop-shape shape-c"></div></button>
+            </div>
+            <div class="crop-area-wrapper"><canvas id="cropCanvas"></canvas></div>
+            <div class="zoom-controls"><span>ZOOM</span><input type="range" id="zoomSlider" min="0.1" max="4" step="0.01" value="1"></div>
+            <div style="display:flex; gap:10px; margin-top:10px;">
+                <button class="secondary" id="cancelCropBtn" style="flex:1;">Отмена</button>
+                <button class="btn btn-outline" id="rotateBtn" style="font-size: 20px; padding: 0 15px;" title="Повернуть">&#8635;</button>
+                <button id="applyCropBtn" style="flex:1; background:var(--accent-gold); color:#fff;">Применить</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="galleryModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header"><span id="galleryTitle">Галерея</span><span class="modal-close" onclick="closeGallery()">×</span></div>
+            <div class="gallery-tabs" id="galleryTabs"></div>
+            <div class="gallery-grid" id="galleryGrid"></div>
+            <div style="border-top:1px solid #333; padding-top:15px; text-align:center;">
+                <button id="galUploadBtn" onclick="handleGalleryUpload()">Загрузить свое</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="qrModal" class="modal-overlay hidden">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">QR Код</div>
+            <div style="color:#ccc; font-size:12px; text-align:center;">
+                Введите ссылку (сайт, instagram).<br>QR-код будет цветом текста.
+            </div>
+            <input type="text" id="qrLinkInput" placeholder="https://..." value="https://">
+            <div style="display:flex; gap:10px;">
+                <button class="secondary" onclick="document.getElementById('qrModal').classList.add('hidden')" style="flex:1;">Отмена</button>
+                <button onclick="applyQR()" style="flex:1; background:var(--accent-gold); color:#fff;">Добавить</button>
+            </div>
+            <div style="text-align:center;">
+                <button class="secondary" onclick="removeQR()" style="border-color:#555; color:#777; font-size:10px; padding:8px;">Удалить QR</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/@panzoom/panzoom@4.5.1/dist/panzoom.min.js"></script>
+    <script src="cover-engine.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
