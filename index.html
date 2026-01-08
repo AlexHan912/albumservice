@@ -28,23 +28,27 @@
         <canvas id="c"></canvas>
         
         <div id="coverDock">
-            <div class="dock-section left"></div>
+            <div class="dock-section left">
+                <button class="dock-icon-btn" onclick="if(panzoomInstance) panzoomInstance.reset()" title="Сбросить зум">
+                    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5-8h10v0M12 7v10"/></svg>
+                </button>
+            </div>
 
             <div class="dock-section center">
-                <button id="btnDockGallery" class="dock-btn hidden" onclick="openGallery('graphics', 'main')">
+                <button id="btnDockGallery" class="dock-main-btn hidden" onclick="openGallery('graphics', 'main')">
                     <svg viewBox="0 0 24 24"><path d="M22 16V4c0-1.1-.9-2-2-2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2zm-11-4l2.03 2.71L16 11l4 5H8l3-4zM2 6v14c0 1.1.9 2 2 2h14v-2H4V6H2z"/></svg>
                     <span>Галерея</span>
                 </button>
 
-                <button id="btnDockUpload" class="dock-btn hidden" onclick="document.getElementById('imageLoader').click()">
-                    <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5z"/></svg>
-                    <span>Загрузить фото</span>
+                <button id="btnDockUpload" class="dock-main-btn hidden" onclick="document.getElementById('imageLoader').click()">
+                    <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                    <span>Добавить фото</span>
                 </button>
             </div>
 
             <div class="dock-section right">
-                <button class="dock-icon-btn" onclick="openMobilePreview()" title="На весь экран">
-                    <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+                <button class="dock-icon-btn" onclick="openMobilePreview()" title="Просмотр">
+                    <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
                 </button>
             </div>
         </div>

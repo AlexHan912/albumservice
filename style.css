@@ -235,84 +235,91 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px
 }
 
 /* --- COVER DOCK (BOTTOM PANEL) --- */
+/* --- STYLISH COVER DOCK --- */
 #coverDock {
     position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 70px; /* Фиксированная высота панели */
-    background: rgba(26, 26, 26, 0.95);
-    backdrop-filter: blur(10px);
-    border-top: 1px solid #333;
+    bottom: 20px; /* Отступ от самого низа для "парящего" эффекта */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 95%; /* Не на всю ширину, а аккуратно */
+    max-width: 600px; /* Ограничение ширины на десктопе */
+    height: 60px;
+    background: rgba(30, 30, 30, 0.95); /* Темный фон */
+    backdrop-filter: blur(12px); /* Размытие фона */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 30px; /* Сильное скругление (Pill shape) */
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 20px;
-    z-index: 50;
+    padding: 0 10px;
+    z-index: 900;
     pointer-events: auto;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
 }
 
 .dock-section {
-    flex: 1;
     display: flex;
     align-items: center;
 }
-.dock-section.center { justify-content: center; gap: 15px; }
-.dock-section.right { justify-content: flex-end; }
+.dock-section.left, .dock-section.right { width: 50px; justify-content: center; }
+.dock-section.center { flex: 1; justify-content: center; gap: 10px; }
 
-/* Стильные кнопки действий */
-.dock-btn {
+/* Круглые иконки по бокам */
+.dock-icon-btn {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
     background: transparent;
-    border: 1px solid #555;
-    color: #eee;
+    border: none;
+    color: #aaa;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.dock-icon-btn svg { width: 24px; height: 24px; fill: currentColor; }
+.dock-icon-btn:hover { color: #fff; background: rgba(255,255,255,0.1); }
+
+/* Центральные кнопки действий (Pills) */
+.dock-main-btn {
+    background: #e0e0e0; /* Светлая кнопка для контраста */
+    color: #000;
+    border: none;
     height: 40px;
     padding: 0 20px;
     border-radius: 20px;
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 11px;
+    font-size: 13px;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
     cursor: pointer;
-    transition: all 0.2s;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    transition: transform 0.2s, background 0.2s;
     font-family: 'Roboto', sans-serif;
 }
-.dock-btn svg { width: 18px; height: 18px; fill: currentColor; }
-.dock-btn:hover { background: #333; border-color: #fff; color: #fff; }
-.dock-btn:active { transform: scale(0.96); }
+.dock-main-btn svg { width: 18px; height: 18px; fill: currentColor; }
+.dock-main-btn:hover { background: #fff; transform: translateY(-2px); }
+.dock-main-btn:active { transform: scale(0.96); }
 
-/* Кнопка фулскрина */
-.dock-icon-btn {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: transparent;
-    border: 1px solid transparent;
-    color: #999;
-    display: grid;
-    place-items: center;
-    cursor: pointer;
-    transition: 0.2s;
-}
-.dock-icon-btn svg { width: 24px; height: 24px; fill: currentColor; }
-.dock-icon-btn:hover { color: #fff; background: #333; }
-
-/* Скрываем старые элементы, если остались */
+/* Скрываем старое */
 #photoTrigger, #canvasActions { display: none !important; }
 
-/* Адаптация для мобильных */
-@media (max-width: 1024px) {
+/* Адаптация */
+@media (max-width: 600px) {
     #coverDock {
-        height: 60px;
-        padding: 0 15px;
+        bottom: 15px;
+        width: 92%;
+        height: 55px;
     }
-    .dock-btn {
+    .dock-main-btn {
         padding: 0 15px;
-        font-size: 10px;
+        font-size: 12px;
     }
-    .dock-btn span {
-        /* На очень маленьких экранах можно скрыть текст, если нужно */
-        /* display: none; */ 
+    .dock-main-btn span {
+        /* На совсем узких экранах можно убрать текст */
+        /* display: none; */
     }
 }

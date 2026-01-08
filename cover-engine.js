@@ -55,7 +55,7 @@ updateDimensions: function(container, state) {
         
         // ВЫСОТА ПАНЕЛИ УПРАВЛЕНИЯ (DOCK)
         // Мы вычитаем её, чтобы обложка центрировалась в СВОБОДНОЙ зоне
-        const dockHeight = isMobile ? 60 : 70; 
+        const dockHeight = 90; // 60px высота панели + 20px отступ + 10px запас
 
         // Доступная высота для рисования (минус панель)
         const availableHeight = container.clientHeight - dockHeight;
