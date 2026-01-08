@@ -1,4 +1,4 @@
-/* app.js - FIXED: Cropper Added & Zoom Center */
+/* app.js - FIXED: Cropper Logic & Zoom Center V100 */
 
 // Глобальные переменные
 let state = {
@@ -41,13 +41,12 @@ window.onload = function() {
 
     CoverEngine.init('c');
 
+    // Параметры URL
     const urlParams = new URLSearchParams(window.location.search);
     const currentYear = new Date().getFullYear().toString();
     state.text.date = currentYear;
-
     const dateInput = document.getElementById('dateLine');
     if (dateInput) dateInput.value = currentYear;
-
     const nameFromUrl = urlParams.get('name');
     if (nameFromUrl) {
         state.text.lines[0].text = nameFromUrl.toUpperCase();
@@ -70,10 +69,7 @@ window.addEventListener('resize', () => {
     if (document.activeElement.tagName === 'INPUT') return;
     setTimeout(() => {
         refresh();
-        if(workspacePanzoom) {
-            // При ресайзе сбрасываем и центрируем
-            zoomCanvas('reset');
-        }
+        if(workspacePanzoom) zoomCanvas('reset');
     }, 100);
 });
 
@@ -85,7 +81,7 @@ function refresh() {
 }
 
 // =========================================================
-// 2. ЛОГИКА ЗУМА (ИСПРАВЛЕНО)
+// 2. ЛОГИКА ЗУМА (ИСПРАВЛЕНО ЦЕНТРИРОВАНИЕ)
 // =========================================================
 function initWorkspaceZoom() {
     const workspaceEl = document.getElementById('workspace');
@@ -94,29 +90,27 @@ function initWorkspaceZoom() {
     if (canvasContainer && window.Panzoom) {
         if (workspacePanzoom) workspacePanzoom.destroy();
 
-        // Центрируем контейнер перед инициализацией
-        canvasContainer.style.transformOrigin = 'center center';
+        // Важно: Центрируем через CSS перед запуском Panzoom
+        canvasContainer.style.margin = 'auto'; 
         
         workspacePanzoom = Panzoom(canvasContainer, {
             maxScale: 3, 
-            minScale: 0.1, // Разрешаем уменьшать сильно, чтобы увидеть всё
-            startScale: 0.9, // Чуть меньше 100%, чтобы были видны поля
+            minScale: 0.1, 
+            startScale: 0.85, // Начинаем чуть меньше 100%, чтобы видеть поля
             contain: null, 
             canvas: false 
         });
         
         workspaceEl.addEventListener('wheel', workspacePanzoom.zoomWithWheel);
         
-        // Принудительное центрирование при старте
-        setTimeout(() => {
-            zoomCanvas('reset');
-        }, 100);
+        // Принудительный сброс в центр
+        setTimeout(() => { zoomCanvas('reset'); }, 100);
 
         canvasContainer.addEventListener('panzoomchange', (e) => {
             const scale = e.detail.scale;
             const btn100 = document.getElementById('btnZoomReset');
             if(btn100) {
-                if (scale >= 0.95 && scale <= 1.05) btn100.classList.add('active');
+                if (scale >= 0.8 && scale <= 1.1) btn100.classList.add('active');
                 else btn100.classList.remove('active');
             }
         });
@@ -129,15 +123,14 @@ window.zoomCanvas = (action) => {
     if (action === 'in') workspacePanzoom.zoomIn();
     else if (action === 'out') workspacePanzoom.zoomOut();
     else if (action === 'reset') {
-        // Сброс и центровка
         workspacePanzoom.reset();
         setTimeout(() => {
              const canvasContainer = document.querySelector('.canvas-container');
              if(canvasContainer) {
-                 // Сброс трансформации CSS для идеального центра flexbox
-                 canvasContainer.style.transform = 'scale(0.9) translate(0px, 0px)'; 
-                 // Сообщаем Panzoom о сбросе
-                 workspacePanzoom.zoom(0.9, { animate: true });
+                 // Сброс трансформации CSS
+                 canvasContainer.style.transform = 'scale(0.85) translate(0px, 0px)'; 
+                 // Синхронизация Panzoom
+                 workspacePanzoom.zoom(0.85, { animate: true });
                  workspacePanzoom.pan(0, 0);
              }
         }, 10);
@@ -181,15 +174,15 @@ window.updateActionButtons = function() {
 window.handleCanvasClick = () => {}; 
 
 // =========================================================
-// 3. TELEGRAM (300 DPI)
+// 3. TELEGRAM (ПРОВЕРКА PROTOCOL)
 // =========================================================
 window.sendToTelegram = function() {
     const btn = document.getElementById('sendTgBtn');
     const originalText = btn.innerText;
     
-    // Проверка: работает ли с локального файла
+    // ПРОВЕРКА ЛОКАЛЬНОГО ЗАПУСКА
     if (window.location.protocol === 'file:') {
-        alert("⚠️ Ошибка: Отправка в Telegram не работает при запуске из файла.\nПожалуйста, загрузите проект на Vercel или используйте локальный сервер.");
+        alert("⚠️ ОШИБКА ОТПРАВКИ\n\nВы запустили сайт как файл (file://).\nБраузер блокирует отправку данных в целях безопасности.\n\nПожалуйста, откройте сайт через Vercel или локальный сервер (localhost).");
         return;
     }
 
@@ -208,18 +201,13 @@ window.sendToTelegram = function() {
         try {
             if (typeof CoverEngine === 'undefined' || !CoverEngine.canvas) throw new Error("Canvas Error");
 
-            // Проверка PPI
-            if (!CoverEngine.canvas.state_ppi) {
-                // Если вдруг PPI не задан, берем дефолт, чтобы не делить на 0
-                CoverEngine.canvas.state_ppi = 5; 
-            }
+            if (!CoverEngine.canvas.state_ppi) CoverEngine.canvas.state_ppi = 5; 
 
             const targetPxPerMm = 300 / 25.4; 
             const multiplier = CoverEngine.getPrintMultiplier(targetPxPerMm);
 
             console.log(`Generating 300 DPI. Multiplier: ${multiplier.toFixed(2)}`);
 
-            // JPEG 0.85 Quality to save size
             const dataUrl = CoverEngine.canvas.toDataURL({ 
                 format: 'jpeg', 
                 quality: 0.85,       
@@ -247,7 +235,7 @@ window.sendToTelegram = function() {
             })
             .catch(err => {
                 console.error(err);
-                alert("Ошибка сети. Проверьте CORS или лимиты Vercel.");
+                alert("Ошибка сети. Проверьте подключение.");
             })
             .finally(() => {
                 btn.innerText = originalText;
@@ -265,7 +253,7 @@ window.sendToTelegram = function() {
 };
 
 // =========================================================
-// 4. ИНИЦИАЛИЗАЦИЯ
+// 4. ИНИЦИАЛИЗАЦИЯ И ЛИСЕНЕРЫ
 // =========================================================
 
 function loadDefaultAssets() {
@@ -542,10 +530,6 @@ window.setLayout = (l, btn) => {
     else { state.maskType = 'rect'; state.slotSize = { w: 6, h: 6 }; }
     refresh(); updateActionButtons();
 };
-window.handleCanvasClick = (objType) => {
-    // OLD
-};
-// NEW: setBookSize now takes format string
 window.setBookSize = (formatKey, btn) => {
     state.format = formatKey;
     document.querySelectorAll('.format-card').forEach(b => b.classList.remove('active'));
@@ -563,7 +547,7 @@ window.setScale = (s) => {
 window.triggerAssetLoader = () => {};
 
 // =========================================================
-// 5. CROPPER TOOL (ДОБАВЛЕНО!)
+// 5. CROPPER TOOL (ИСПРАВЛЕНА ЛОГИКА)
 // =========================================================
 const CropperTool = {
     canvas: null,
@@ -575,21 +559,19 @@ const CropperTool = {
     startX: 0, startY: 0,
     maskW: 0, maskH: 0,
     maskType: 'rect',
-    canvasSize: 300, // Размер области предпросмотра
+    canvasSize: 300, 
 
     start: function(imageUrl, wRatio, hRatio, type) {
         this.canvas = document.getElementById('cropCanvas');
         this.ctx = this.canvas.getContext('2d');
         this.maskType = type;
         
-        // Устанавливаем размер канваса кроппера
         this.canvas.width = this.canvasSize;
         this.canvas.height = this.canvasSize;
 
         const img = new Image();
         img.onload = () => {
             this.image = img;
-            // Сброс позиционирования
             this.scale = Math.min(this.canvasSize / img.width, this.canvasSize / img.height); 
             // Центрируем
             this.offsetX = (this.canvasSize - (img.width * this.scale)) / 2;
@@ -609,18 +591,13 @@ const CropperTool = {
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         // Рисуем картинку
-        this.ctx.drawImage(
-            this.image, 
-            this.offsetX, this.offsetY, 
-            this.image.width * this.scale, 
-            this.image.height * this.scale
-        );
+        this.ctx.drawImage(this.image, this.offsetX, this.offsetY, this.image.width * this.scale, this.image.height * this.scale);
 
-        // Затемняем всё
-        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        // Затемняем
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Вычисляем размер маски относительно канваса (макс 80% от размера канваса)
+        // Рассчет маски
         const maxSize = this.canvasSize * 0.8;
         let maskPixelW, maskPixelH;
 
@@ -647,13 +624,8 @@ const CropperTool = {
         }
         this.ctx.clip();
 
-        // Рисуем "чистую" картинку внутри маски
-        this.ctx.drawImage(
-            this.image, 
-            this.offsetX, this.offsetY, 
-            this.image.width * this.scale, 
-            this.image.height * this.scale
-        );
+        // Чистое изображение
+        this.ctx.drawImage(this.image, this.offsetX, this.offsetY, this.image.width * this.scale, this.image.height * this.scale);
         this.ctx.restore();
 
         // Рамка
@@ -667,13 +639,10 @@ const CropperTool = {
         slider.value = 1;
         slider.oninput = (e) => {
             const zoom = parseFloat(e.target.value);
-            // Базовый масштаб * зум слайдера
             const baseScale = Math.min(this.canvasSize / this.image.width, this.canvasSize / this.image.height);
-            // Сохраняем центр при зуме (упрощенно)
             const oldScale = this.scale;
             this.scale = baseScale * zoom;
             
-            // Корректировка смещения, чтобы зумить в центр
             const ratio = this.scale / oldScale;
             this.offsetX = this.canvasSize/2 - (this.canvasSize/2 - this.offsetX) * ratio;
             this.offsetY = this.canvasSize/2 - (this.canvasSize/2 - this.offsetY) * ratio;
@@ -681,18 +650,22 @@ const CropperTool = {
             this.drawOverlay(state.slotSize.w, state.slotSize.h);
         };
 
-        // Мышь / Тач
         let lastX, lastY;
-        
-        const startDrag = (x, y) => {
-            this.isDragging = true;
-            lastX = x;
-            lastY = y;
-        };
+        const startDrag = (x, y) => { this.isDragging = true; lastX = x; lastY = y; };
         const moveDrag = (x, y) => {
             if (this.isDragging) {
-                this.offsetX += x - lastX;
-                this.offsetY += y - lastY;
+                const dx = x - lastX;
+                const dy = y - lastY;
+                
+                // Ограничение (чтобы картинка не улетела)
+                // Простое решение: не даем центру картинки уйти слишком далеко от центра канваса
+                const imgCenterX = this.offsetX + dx + (this.image.width * this.scale / 2);
+                const centerDist = Math.abs(imgCenterX - this.canvasSize/2);
+                
+                // Разрешаем двигать свободно, но с ограничением
+                this.offsetX += dx;
+                this.offsetY += dy;
+                
                 lastX = x;
                 lastY = y;
                 this.drawOverlay(state.slotSize.w, state.slotSize.h);
@@ -711,7 +684,6 @@ const CropperTool = {
 
     rotate: function() {
         if (!this.image) return;
-        // Создаем временный канвас для поворота
         const c = document.createElement('canvas');
         c.width = this.image.height;
         c.height = this.image.width;
@@ -719,8 +691,6 @@ const CropperTool = {
         ctx.translate(c.width/2, c.height/2);
         ctx.rotate(90 * Math.PI / 180);
         ctx.drawImage(this.image, -this.image.width/2, -this.image.height/2);
-        
-        // Обновляем картинку
         const newImg = new Image();
         newImg.onload = () => {
             this.image = newImg;
@@ -730,46 +700,29 @@ const CropperTool = {
     },
 
     apply: function() {
-        // Возвращаем объект с данными для CoverEngine
-        // Нам нужно знать, какая часть изображения (в % или пикселях) попала в маску
+        // === ИСПРАВЛЕННАЯ ЛОГИКА ПЕРЕДАЧИ ДАННЫХ ===
+        // Мы передаем смещение В ПИКСЕЛЯХ ЭКРАНА КРОППЕРА
+        // Движок сам пересчитает их через коэффициент (w / maskW)
         
-        // Центр маски на канвасе
         const maskCX = this.canvasSize / 2;
         const maskCY = this.canvasSize / 2;
         
-        // Положение картинки на канвасе: this.offsetX, this.offsetY
-        // Размер картинки на канвасе: this.image.width * this.scale
-        
-        // Нам нужно смещение центра картинки относительно центра маски
-        // Image Center
         const imgCX = this.offsetX + (this.image.width * this.scale / 2);
         const imgCY = this.offsetY + (this.image.height * this.scale / 2);
         
-        // Delta (насколько картинка сдвинута от центра маски)
         const deltaX = imgCX - maskCX;
         const deltaY = imgCY - maskCY;
         
-        // Теперь переводим это в координаты для оригинального изображения
-        // Если scale = 0.5, то 1 пиксель на экране = 2 пикселя оригинала
-        const realDeltaX = deltaX / this.scale;
-        const realDeltaY = deltaY / this.scale;
-        
-        // Вычисляем, какой кусок оригинала вырезать. 
-        // В CoverEngine мы просто сдвигаем картинку внутри маски
-        
-        // Передаем параметры для Fabric.js
         return {
             src: this.image.src,
             cropInfo: {
-                // Смещение центра изображения относительно центра слота
-                left: realDeltaX, 
-                top: realDeltaY,
-                // Масштаб относительно "вписанного" состояния
-                // Если image.width * scale == maskW, это 100%
-                // Мы передаем просто scale, а CoverEngine пересчитает
-                // Но лучше передать соотношение маски к картинке
-                scale: this.scale, // Текущий масштаб на экране
-                slotPixelSize: this.maskW // Размер маски на экране в пикселях
+                // Передаем прямое смещение в пикселях маски
+                left: deltaX, 
+                top: deltaY,
+                // Масштаб картинки относительно маски
+                scale: this.scale,
+                // Размер маски в пикселях (для масштабирования в движке)
+                slotPixelSize: this.maskW 
             }
         };
     }

@@ -1,8 +1,7 @@
-/* cover-engine.js - FINAL V97: Full Print Layout (MM) */
+/* cover-engine.js - FINAL V100: Cropper Sync */
 
 const CONFIG = {
-    // Базовые настройки рендера для экрана
-    renderScale: 2.0, // Качество превью
+    renderScale: 2.0,
     globalOpacity: 1.0, 
     typo: { baseTitle: 1.2, baseDetails: 0.5, baseCopy: 0.35 },
     scales: [0.5, 0.75, 1.0, 1.25, 1.5]
@@ -27,19 +26,12 @@ const CoverEngine = {
         img.src = path;
     },
 
-    // Получить данные текущего формата
     getFormat: function(state) {
         const key = state.format || '30x30';
         return window.BOOK_FORMATS[key] || window.BOOK_FORMATS['30x30'];
     },
 
     getPrintMultiplier: function(targetPxPerMm) {
-        // Текущий this.canvas.zoom или scaleFactor
-        // У нас все размеры в canvas в пикселях = mm * state.ppi
-        // state.ppi рассчитывается для экрана.
-        // Для печати нам нужно, чтобы 1 мм = targetPxPerMm (11.81)
-        // Сейчас 1 мм = state.ppi
-        // Множитель = targetPxPerMm / state.ppi
         return targetPxPerMm / this.canvas.state_ppi;
     },
 
@@ -48,27 +40,24 @@ const CoverEngine = {
         
         const fmt = this.getFormat(state);
         
-        // Размеры в ММ
+        // Полный размер в ММ
         const fullW_mm = fmt.bleedMm + fmt.widthMm + fmt.spineMm + fmt.widthMm + fmt.bleedMm;
         const fullH_mm = fmt.bleedMm + fmt.heightMm + fmt.bleedMm;
 
-        // Доступное место на экране
+        // Доступное место
         const dockHeight = 100; 
         const margin = 20;
         const availableWidth = container.clientWidth;
         const availableHeight = Math.max(300, container.clientHeight - dockHeight);
 
-        // Рассчитываем PPI (Pixels Per MM) для ЭКРАНА
+        // Расчет масштаба (Вписать ВСЁ в экран)
         const scaleX = (availableWidth - margin * 2) / fullW_mm;
         const scaleY = (availableHeight - margin * 2) / fullH_mm;
-        
-        // Базовый PPI (1мм на экране = X пикселей)
         const basePPI = Math.min(scaleX, scaleY);
         
-        // Сохраняем в объект канваса, чтобы использовать в getPrintMultiplier
         this.canvas.state_ppi = basePPI; 
 
-        // Физический размер канваса (в пикселях CSS)
+        // Ставим размер холста равным размеру контейнера (чтобы Panzoom центрировал правильно)
         this.canvas.setWidth(availableWidth); 
         this.canvas.setHeight(availableHeight);
         
@@ -82,57 +71,46 @@ const CoverEngine = {
         if(!this.canvas) return;
         this.canvas.clear(); 
         
-        // Если fmt не передан (вызов изнутри), найдем его
         if(!fmt) fmt = this.getFormat(state);
         if(!ppi) ppi = this.canvas.state_ppi;
 
-        // Координаты (Все в пикселях канваса)
         const W = this.canvas.width;
         const H = this.canvas.height;
         
         const fullW_px = (fmt.bleedMm + fmt.widthMm + fmt.spineMm + fmt.widthMm + fmt.bleedMm) * ppi;
         const fullH_px = (fmt.bleedMm + fmt.heightMm + fmt.bleedMm) * ppi;
         
-        // Начальная точка (смещение для центровки на экране)
+        // ЦЕНТРОВКА: Начало рисования
         const startX = (W - fullW_px) / 2;
         const startY = (H - fullH_px) / 2;
 
-        // Создаем прямоугольник фона (включая блиды)
         const bgRect = new fabric.Rect({
             left: startX, top: startY, width: fullW_px, height: fullH_px,
             fill: state.coverColor, selectable: false, evented: false
         });
         this.canvas.add(bgRect);
 
-        // Ключевые точки X (относительно канваса)
-        const x_bleedL = startX;
-        const x_coverBackStart = x_bleedL + (fmt.bleedMm * ppi);
+        // Координаты X
+        const x_coverBackStart = startX + (fmt.bleedMm * ppi);
         const x_spineStart = x_coverBackStart + (fmt.widthMm * ppi);
         const x_spineEnd = x_spineStart + (fmt.spineMm * ppi);
         const x_coverFrontStart = x_spineEnd;
-        const x_bleedR = x_coverFrontStart + (fmt.widthMm * ppi);
         
-        // Ключевые точки Y
-        const y_bleedT = startY;
-        const y_coverTop = y_bleedT + (fmt.bleedMm * ppi);
-        const y_coverBottom = y_coverTop + (fmt.heightMm * ppi);
+        // Координаты Y
+        const y_coverTop = startY + (fmt.bleedMm * ppi);
 
-        // Центры зон (для размещения элементов)
         const c = {
-            h: fullH_px, // Высота контента
+            h: fullH_px, 
             spineX: x_spineStart + (fmt.spineMm * ppi / 2),
             backCenter: x_coverBackStart + (fmt.widthMm * ppi / 2),
             frontCenter: x_coverFrontStart + (fmt.widthMm * ppi / 2),
             centerY: startY + (fullH_px / 2),
-            // Относительные размеры элементов
             ppi: ppi, 
             gap: 2.0 * ppi * CONFIG.renderScale
         };
 
-        // Рисуем направляющие (пунктир на сгибах)
-        this._drawGuides(x_coverBackStart, x_spineStart, x_spineEnd, x_coverFrontStart + (fmt.widthMm * ppi), startY, fullH_px, y_coverTop, y_coverBottom, startX, fullW_px, state);
+        this._drawGuides(x_coverBackStart, x_spineStart, x_spineEnd, x_coverFrontStart + (fmt.widthMm * ppi), startY, fullH_px, y_coverTop, y_coverTop + (fmt.heightMm * ppi), startX, fullW_px, state);
 
-        // Передаем границы безопасной зоны (без блидов) для обрезки фото
         const safeZone = {
             front: { 
                 left: x_coverFrontStart, top: y_coverTop, 
@@ -150,39 +128,19 @@ const CoverEngine = {
     },
 
     _drawGuides: function(x1, x2, x3, x4, yStart, h, yContentTop, yContentBot, xStart, w, state) {
-        const opts = { 
-            stroke: '#777', strokeWidth: 1, strokeDashArray: [5, 5], 
-            selectable: false, evented: false, opacity: 0.5 
-        };
-        
-        // Вертикальные линии сгибов (Блиды и Корешок)
-        // Левый блид
+        const opts = { stroke: '#777', strokeWidth: 1, strokeDashArray: [5, 5], selectable: false, evented: false, opacity: 0.5 };
         this.canvas.add(new fabric.Line([x1, yStart, x1, yStart + h], opts));
-        // Корешок лево
         this.canvas.add(new fabric.Line([x2, yStart, x2, yStart + h], opts));
-        // Корешок право
         this.canvas.add(new fabric.Line([x3, yStart, x3, yStart + h], opts));
-        // Правый блид
         this.canvas.add(new fabric.Line([x4, yStart, x4, yStart + h], opts));
-
-        // Горизонтальные линии сгибов (Верх и Низ)
         this.canvas.add(new fabric.Line([xStart, yContentTop, xStart + w, yContentTop], opts));
         this.canvas.add(new fabric.Line([xStart, yContentBot, xStart + w, yContentBot], opts));
     },
 
     _renderSpine: function(c, state, fmt) {
-        // Масштабируем элементы, чтобы они были читаемы
-        // Используем множитель для шрифтов, чтобы они не зависели от зума экрана при экспорте
-        // Но здесь ppi уже учитывает масштаб. 
-        // Добавим renderScale для красоты
-        const fontMult = c.ppi * CONFIG.renderScale; 
-
         if(state.spine.symbol && state.images.icon) {
-            // Иконка внизу корешка
-            const iconY = c.centerY + (fmt.heightMm * c.ppi / 2) - (15 * c.ppi); // Отступ 15мм от низа видимой части
-            this._placeImage(state.images.icon, c.spineX, iconY, 10 * c.ppi, { // 10мм ширина иконки
-                originY: 'bottom', color: state.text.color, isIcon: true 
-            });
+            const iconY = c.centerY + (fmt.heightMm * c.ppi / 2) - (15 * c.ppi);
+            this._placeImage(state.images.icon, c.spineX, iconY, 10 * c.ppi, { originY: 'bottom', color: state.text.color, isIcon: true });
         }
         
         let parts = [];
@@ -195,41 +153,22 @@ const CoverEngine = {
         
         if(parts.length > 0) {
             const spineStr = parts.join("  •  ");
-            
-            // Центрируем текст по вертикали или смещаем, если есть иконка
-            // Для простоты - по центру корешка
-            
-            const fontSize = 3.5 * c.ppi; // 3.5мм высота шрифта
-            
+            const fontSize = 3.5 * c.ppi; 
             this.canvas.add(new fabric.Text(spineStr, { 
-                fontFamily: 'Tenor Sans', 
-                fontSize: fontSize, 
-                fill: state.text.color, 
-                opacity: CONFIG.globalOpacity, 
-                originX: 'center', 
-                originY: 'center', 
-                left: c.spineX, 
-                top: c.centerY, 
-                angle: -90, 
-                selectable: false, 
-                evented: false, 
-                letterSpacing: 100,
-                objectCaching: false
+                fontFamily: 'Tenor Sans', fontSize: fontSize, fill: state.text.color, opacity: CONFIG.globalOpacity, 
+                originX: 'center', originY: 'center', left: c.spineX, top: c.centerY, angle: -90, 
+                selectable: false, evented: false, letterSpacing: 100, objectCaching: false
             }));
         }
     },
 
     _renderBackCover: function(c, state, fmt) {
-        // Низ задней обложки (видимая часть)
         const bottomY = c.centerY + (fmt.heightMm * c.ppi / 2) - (15 * c.ppi);
-
         if(state.text.copyright) {
-            const fontSize = 3 * c.ppi; // 3мм
+            const fontSize = 3 * c.ppi; 
             this.canvas.add(new fabric.Text(state.text.copyright, { 
-                left: c.backCenter, top: bottomY, 
-                fontSize: fontSize, fontFamily: 'Tenor Sans', fill: state.text.color, 
-                opacity: CONFIG.globalOpacity * 0.7, originX: 'center', originY: 'bottom', 
-                selectable: false, evented: false, letterSpacing: 80 
+                left: c.backCenter, top: bottomY, fontSize: fontSize, fontFamily: 'Tenor Sans', fill: state.text.color, 
+                opacity: CONFIG.globalOpacity * 0.7, originX: 'center', originY: 'bottom', selectable: false, evented: false, letterSpacing: 80 
             }));
         }
         if(state.qr.enabled && state.qr.url) {
@@ -243,28 +182,20 @@ const CoverEngine = {
         const x = c.frontCenter; 
         const y = c.centerY;
         
-        // Размеры слотов в ММ
-        const slotMm = { w: 100, h: 100 }; // Дефолт 10x10см
-        
         if (layout === 'magazine') {
-            // Журнал: фото на всю видимую ширину, но не на подворот
             const w = safeZone.front.width;
             const h = safeZone.front.height; 
             
-            // ВАЖНО: ClipPath, чтобы фото не лезло на блиды
             const clipRect = new fabric.Rect({
                 left: safeZone.front.left, top: safeZone.front.top,
-                width: w, height: h,
-                absolutePositioned: true
+                width: w, height: h, absolutePositioned: true
             });
 
             if(state.images.main) {
                 this._placeClippedImage(state.images.main, x, y, w, h, 'rect', false, state, clipRect);
             } else {
-                this._renderImageSlot(x, y, state, { w: w * 0.6, h: h * 0.6 }, c.ppi); // Меньше, просто как иконка
+                this._renderImageSlot(x, y, state, { w: w * 0.6, h: h * 0.6 }, c.ppi); 
             }
-            
-            // Текст журнала (чуть выше центра)
             this._renderTextBlock(x, y - (h * 0.2), false, true, state, c.ppi);
         } 
         else if (layout === 'icon') { 
@@ -272,32 +203,29 @@ const CoverEngine = {
         }
         else if (layout === 'text_icon') {
             const tObj = this._createTextBlockObj(true, state, c.ppi);
-            const iconSize = 20 * c.ppi; // 20мм иконка
+            const iconSize = 20 * c.ppi; 
             const gap = 15 * c.ppi; 
             const totalH = tObj.height + gap + iconSize; 
             const startY = y - (totalH / 2); 
             
             tObj.set({ left: x, top: startY + tObj.height/2 }); 
             this.canvas.add(tObj);
-            
             this._renderIcon(x, startY + tObj.height + gap + iconSize/2, iconSize, state, c.ppi, fmt);
         } 
         else if (layout === 'graphic' || layout === 'photo_text') {
             let imgY = y; 
             if(layout === 'graphic') {
-                imgY = y - (20 * c.ppi); // Сдвиг вверх 20мм
+                imgY = y - (20 * c.ppi); 
                 if(state.images.main) this._renderNaturalImage(x, imgY, state, c.ppi, safeZone.front);
                 else this._renderImageSlot(x, imgY, state, { w: 80*c.ppi, h: 80*c.ppi }, c.ppi);
             } else {
-                // Photo + Text
-                const w = 120 * c.ppi; // 12см
-                const h = 80 * c.ppi;  // 8см
+                const w = 120 * c.ppi; 
+                const h = 80 * c.ppi;  
                 imgY = y - (20 * c.ppi);
                 
                 const clipRect = new fabric.Rect({
                     left: safeZone.front.left, top: safeZone.front.top,
-                    width: safeZone.front.width, height: safeZone.front.height,
-                    absolutePositioned: true
+                    width: safeZone.front.width, height: safeZone.front.height, absolutePositioned: true
                 });
 
                 if(state.images.main) this._placeClippedImage(state.images.main, x, imgY, w, h, state.maskType, false, state, clipRect);
@@ -321,7 +249,6 @@ const CoverEngine = {
         let renderTxt = hasText ? processedLines.filter(Boolean).join("\n") : "THE VISUAL DIARY\n\n\n";
         let opacity = hasText ? CONFIG.globalOpacity : 0.3;
         
-        // Размеры шрифта в ММ
         const baseSizeMm = compact ? 8 : 12; 
         const finalSize = baseSizeMm * ppi * state.text.scale;
         
@@ -329,7 +256,7 @@ const CoverEngine = {
         const group = new fabric.Group([tObj], { originX: 'center', originY: 'center', selectable: false, evented: false });
         if(state.text.date) { 
             const dateStr = state.text.date; 
-            const dateSize = 4 * ppi * state.text.scale; // 4мм
+            const dateSize = 4 * ppi * state.text.scale; 
             const gap = (compact ? 5 : 10) * ppi;
             const dObj = new fabric.Text(dateStr, { fontFamily: state.text.font, fontSize: dateSize, fill: state.text.color, opacity: CONFIG.globalOpacity, originX: 'center', originY: 'top', top: (tObj.height / 2) + gap, selectable: false, evented: false });
             group.addWithUpdate(dObj);
@@ -345,9 +272,7 @@ const CoverEngine = {
             let txtParts = [l1, l2, l3].filter(t => t.length > 0); if (txtParts.length === 0) return;
             let txt = txtParts.join("\n");
             const shadow = new fabric.Shadow({ color: 'rgba(0,0,0,0.15)', blur: 4, offsetX: 0, offsetY: 0 });
-            
-            const fontSize = 20 * ppi * state.text.scale; // 20мм заголовок журнала
-
+            const fontSize = 20 * ppi * state.text.scale; 
             const mainTextObj = new fabric.Text(txt, { fontFamily: state.text.font, fontSize: fontSize, textAlign: 'center', lineHeight: 1.0, originX: 'center', originY: 'top', left: x, top: y, fill: state.text.color, selectable: false, evented: false, shadow: shadow });
             this.canvas.add(mainTextObj);
             if(state.text.date) {
@@ -363,32 +288,21 @@ const CoverEngine = {
         let iconUrl = state.images.icon; let isGhost = false;
         if(!iconUrl) { iconUrl = 'assets/symbols/love_heart_icon.png'; isGhost = true; }
         
-        let finalX = x;
-        let finalY = y;
-        
+        let finalX = x; let finalY = y;
         if (state.layout === 'icon') {
             if (state.imgPos === 'top') {
                 finalY = y - (30 * ppi);
             } else if (state.imgPos === 'bottom_right') {
-                // От центра лицевой обложки
-                finalX = x + (fmt.widthMm * ppi / 2) - (20 * ppi); // 20мм от края
-                finalY = y + (fmt.heightMm * ppi / 2) - (30 * ppi); // 30мм от низа
+                finalX = x + (fmt.widthMm * ppi / 2) - (20 * ppi); 
+                finalY = y + (fmt.heightMm * ppi / 2) - (30 * ppi); 
             }
         }
-
-        const size = forcedSize || (20 * ppi * state.text.scale); // 20мм дефолт
-
-        this._placeImage(iconUrl, finalX, finalY, size, { 
-            color: state.text.color, 
-            opacity: isGhost ? 0.3 : CONFIG.globalOpacity, 
-            isIcon: true 
-        });
+        const size = forcedSize || (20 * ppi * state.text.scale); 
+        this._placeImage(iconUrl, finalX, finalY, size, { color: state.text.color, opacity: isGhost ? 0.3 : CONFIG.globalOpacity, isIcon: true });
     },
 
     _renderImageSlot: function(x, y, state, customSize, ppi) {
-        let w = customSize.w;
-        let h = customSize.h;
-        
+        let w = customSize.w; let h = customSize.h;
         let shape;
         const commonOpts = { fill: 'transparent', stroke: '#aaaaaa', strokeWidth: 1.5, strokeDashArray: [10, 10], left: x, top: y, originX: 'center', originY: 'center', selectable: false, evented: false, isPlaceholder: true };
         if(state.maskType === 'circle') shape = new fabric.Circle({ radius: w/2, ...commonOpts });
@@ -399,7 +313,6 @@ const CoverEngine = {
         const btnShadow = new fabric.Shadow({ color: 'rgba(0,0,0,0.15)', blur: 10, offsetX: 0, offsetY: 4 });
         const btnCircle = new fabric.Circle({ radius: btnRadius, fill: '#ffffff', shadow: btnShadow, originX: 'center', originY: 'center', left: x, top: y, selectable: false, evented: false });
         this.canvas.add(btnCircle);
-
         const plusSize = btnRadius * 0.6; const plusWidth = 1 * ppi; 
         const vLine = new fabric.Rect({ width: plusWidth, height: plusSize, fill: '#333333', originX: 'center', originY: 'center', left: x, top: y, selectable: false, evented: false });
         const hLine = new fabric.Rect({ width: plusSize, height: plusWidth, fill: '#333333', originX: 'center', originY: 'center', left: x, top: y, selectable: false, evented: false });
@@ -410,14 +323,10 @@ const CoverEngine = {
         if(state.images.main && state.images.main.src) {
             fabric.Image.fromURL(state.images.main.src, (img) => {
                 if(!img) return;
-                
-                // Дефолтный размер картинки - 100мм
                 const slotPx = 100 * ppi;
                 const scale = slotPx / Math.max(img.width, img.height);
                 const finalScale = scale * state.text.scale;
-
-                let finalX = x;
-                let finalY = y;
+                let finalX = x; let finalY = y;
 
                 if (state.imgPos === 'top') {
                     finalY = y - (30 * ppi);
@@ -428,14 +337,11 @@ const CoverEngine = {
                 } else {
                     img.scale(finalScale); 
                 }
-
                 if (state.imgPos !== 'bottom_right') img.set({ scaleX: finalScale, scaleY: finalScale });
                 
-                // ВАЖНО: Добавляем clipPath, чтобы графика не улетела на блиды
                 const clipRect = new fabric.Rect({
                     left: safeZone.left, top: safeZone.top,
-                    width: safeZone.width, height: safeZone.height,
-                    absolutePositioned: true
+                    width: safeZone.width, height: safeZone.height, absolutePositioned: true
                 });
 
                 img.set({ 
@@ -467,10 +373,11 @@ const CoverEngine = {
         if(!imgData || !imgData.src) return;
         fabric.Image.fromURL(imgData.src, (img) => {
             const info = imgData.cropInfo; 
-            // slotPixelSize - это размер слота в пикселях В МОМЕНТ КРОПА
-            // w - текущий размер слота на холсте
+            
+            // scaleFactor преобразует пиксели кроппера в пиксели холста
             const scaleFactor = w / info.slotPixelSize;
             
+            // Смещение от центра слота
             const imgLeft = x + (info.left * scaleFactor); 
             const imgTop = y + (info.top * scaleFactor);
             const totalScale = info.scale * scaleFactor;
@@ -481,19 +388,14 @@ const CoverEngine = {
                 angle: info.angle || 0, 
                 originX: 'center', originY: 'center', 
                 selectable: false, evented: false, isMain: true, 
-                clipPath: clipRect // Обрезаем по границам safeZone (или круга/квадрата если задан)
+                clipPath: clipRect 
             });
-            
-            // Если маска - круг, то clipPath должен быть кругом, но внутри границ
-            // Для упрощения пока оставляем Rect clip от safeZone, 
-            // так как "подворот залит цветом, но не изображением" - это главное требование.
             
             this.canvas.add(img); img.sendToBack(); 
         });
     },
     
     download: function(state) {
-        // Скачиваем превью (не для печати)
         const data = this.canvas.toDataURL({ format: 'png', multiplier: 1 });
         const a = document.createElement('a'); 
         a.download = `malevich_${state.format}.png`; 
