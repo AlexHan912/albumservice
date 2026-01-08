@@ -1,6 +1,5 @@
-/* app.js - FIXED V101: Zoom Center, Strict Cropper, CORS */
+/* app.js - FIXED V104: No Mobile Preview + Strict Dock */
 
-// Глобальные переменные
 let state = {
     format: '30x30',
     layout: 'text_icon', 
@@ -19,12 +18,9 @@ let state = {
 
 let workspacePanzoom = null;
 
-// =========================================================
-// 1. ГЛАВНЫЙ ЗАПУСК
-// =========================================================
+// INIT
 window.onload = function() {
-    console.log("MALEVICH Configurator Starting V101...");
-
+    console.log("MALEVICH Configurator Quiet Luxury V2.0...");
     setTimeout(() => {
         const loader = document.getElementById('app-loader');
         if (loader) {
@@ -33,24 +29,14 @@ window.onload = function() {
         }
     }, 1000);
 
-    if (typeof CoverEngine === 'undefined') {
-        alert("Critical Error: CoverEngine not loaded.");
-        return;
-    }
+    if (typeof CoverEngine === 'undefined') { alert("Critical Error: CoverEngine not loaded."); return; }
 
     CoverEngine.init('c');
 
-    const urlParams = new URLSearchParams(window.location.search);
     const currentYear = new Date().getFullYear().toString();
     state.text.date = currentYear;
     const dateInput = document.getElementById('dateLine');
     if (dateInput) dateInput.value = currentYear;
-    const nameFromUrl = urlParams.get('name');
-    if (nameFromUrl) {
-        state.text.lines[0].text = nameFromUrl.toUpperCase();
-        const inp = document.getElementById('inputLine1');
-        if (inp) inp.value = nameFromUrl.toUpperCase();
-    }
 
     loadDefaultAssets();
     initColors();
@@ -78,31 +64,21 @@ function refresh() {
     }
 }
 
-// =========================================================
-// 2. ЛОГИКА ЗУМА (ИСПРАВЛЕНА ЦЕНТРОВКА)
-// =========================================================
+// === ZOOM LOGIC ===
 function initWorkspaceZoom() {
     const workspaceEl = document.getElementById('workspace');
     const canvasContainer = workspaceEl.querySelector('.canvas-container');
     
     if (canvasContainer && window.Panzoom) {
         if (workspacePanzoom) workspacePanzoom.destroy();
-
-        // ВАЖНО: Принудительно центрируем точку трансформации
         canvasContainer.style.transformOrigin = 'center center';
-        canvasContainer.style.margin = 'auto'; // Центрируем сам блок во флексе
+        canvasContainer.style.margin = 'auto'; 
         
         workspacePanzoom = Panzoom(canvasContainer, {
-            maxScale: 3, 
-            minScale: 0.1, 
-            startScale: 0.85, // Чуть меньше 100%, чтобы красиво вписалось
-            contain: null, 
-            canvas: false 
+            maxScale: 3, minScale: 0.1, startScale: 0.85, contain: null, canvas: false 
         });
         
         workspaceEl.addEventListener('wheel', workspacePanzoom.zoomWithWheel);
-        
-        // Сразу после инициализации сбрасываем в центр
         setTimeout(() => { zoomCanvas('reset'); }, 50);
 
         canvasContainer.addEventListener('panzoomchange', (e) => {
@@ -118,18 +94,14 @@ function initWorkspaceZoom() {
 
 window.zoomCanvas = (action) => {
     if (!workspacePanzoom) return;
-    
     if (action === 'in') workspacePanzoom.zoomIn();
     else if (action === 'out') workspacePanzoom.zoomOut();
     else if (action === 'reset') {
-        // Жесткий сброс
         workspacePanzoom.reset();
         setTimeout(() => {
              const canvasContainer = document.querySelector('.canvas-container');
              if(canvasContainer) {
-                 // Сбрасываем CSS трансформацию вручную для гарантии
                  canvasContainer.style.transform = 'scale(0.85) translate(0px, 0px)'; 
-                 // Синхронизируем Panzoom
                  workspacePanzoom.zoom(0.85, { animate: false });
                  workspacePanzoom.pan(0, 0);
              }
@@ -139,7 +111,7 @@ window.zoomCanvas = (action) => {
 
 window.setImgPos = (pos) => {
     state.imgPos = pos;
-    document.querySelectorAll('#posGroup .dock-mini-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('#posGroup .dock-btn-icon').forEach(b => b.classList.remove('active'));
     const btn = document.getElementById(`dockPos_${pos}`);
     if(btn) btn.classList.add('active');
     refresh();
@@ -157,7 +129,6 @@ window.updateActionButtons = function() {
     
     if (state.layout === 'graphic') {
         btnGallery.classList.remove('hidden');
-        btnGallery.querySelector('span').innerText = "Галерея";
         if(posGroup) posGroup.classList.remove('hidden'); 
     } 
     else if (state.layout === 'photo_text' || state.layout === 'magazine') {
@@ -166,95 +137,11 @@ window.updateActionButtons = function() {
     }
     else if (state.layout === 'icon' || state.layout === 'text_icon') {
         btnGallery.classList.remove('hidden');
-        btnGallery.querySelector('span').innerText = "Символ";
         if(state.layout === 'icon' && posGroup) posGroup.classList.remove('hidden');
     }
 };
 
-window.handleCanvasClick = () => {}; 
-
-// =========================================================
-// 3. TELEGRAM (С ПРОВЕРКОЙ БЕЗОПАСНОСТИ)
-// =========================================================
-window.sendToTelegram = function() {
-    const btn = document.getElementById('sendTgBtn');
-    const originalText = btn.innerText;
-    
-    // Блокируем, если открыто локально через файл (C:/...)
-    if (window.location.protocol === 'file:') {
-        alert("⚠️ ОШИБКА: Нельзя отправить заказ из локального файла.\nБраузер блокирует это.\n\nЗагрузите проект на Vercel или используйте локальный сервер.");
-        return;
-    }
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const orderData = {
-        orderId: urlParams.get('order_id') || 'Без номера',
-        clientName: urlParams.get('name') || 'Не указано',
-        clientPhone: urlParams.get('phone') || 'Не указан'
-    };
-
-    btn.innerText = "ГЕНЕРАЦИЯ...";
-    btn.disabled = true;
-    btn.style.opacity = "0.7";
-
-    setTimeout(() => {
-        try {
-            if (typeof CoverEngine === 'undefined' || !CoverEngine.canvas) throw new Error("Canvas Error");
-
-            if (!CoverEngine.canvas.state_ppi) CoverEngine.canvas.state_ppi = 5; 
-
-            const targetPxPerMm = 300 / 25.4; 
-            const multiplier = CoverEngine.getPrintMultiplier(targetPxPerMm);
-
-            // Используем JPEG 0.85 для уменьшения размера и ошибок памяти
-            const dataUrl = CoverEngine.canvas.toDataURL({ 
-                format: 'jpeg', 
-                quality: 0.85,       
-                multiplier: multiplier 
-            });
-            
-            const base64Clean = dataUrl.replace(/^data:image\/\w+;base64,/, "");
-
-            btn.innerText = "ОТПРАВКА...";
-
-            fetch('/api/send', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    imageBase64: base64Clean,
-                    orderId: orderData.orderId,
-                    clientName: orderData.clientName,
-                    clientPhone: orderData.clientPhone
-                })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.success) alert(`✅ Заказ #${orderData.orderId} успешно отправлен!`);
-                else alert("Ошибка отправки: " + (data.error || "Error"));
-            })
-            .catch(err => {
-                console.error(err);
-                alert("Ошибка сети. Проверьте CORS.");
-            })
-            .finally(() => {
-                btn.innerText = originalText;
-                btn.disabled = false;
-                btn.style.opacity = "1";
-            });
-
-        } catch(e) {
-            console.error(e);
-            alert("Ошибка генерации: " + e.message);
-            btn.innerText = originalText;
-            btn.disabled = false;
-        }
-    }, 100);
-};
-
-// =========================================================
-// 4. ИНИЦИАЛИЗАЦИЯ И ЛИСЕНЕРЫ
-// =========================================================
-
+// === ASSETS & COLORS ===
 function loadDefaultAssets() {
     const defaultPath = 'assets/symbols/love_heart.png';
     const defaultPreview = 'assets/symbols/love_heart_icon.png';
@@ -328,6 +215,7 @@ window.changeCollection = function(name) {
     if (palette.length > 0 && grid.firstChild) grid.firstChild.click();
 };
 
+// === GALLERY & UPLOAD ===
 window.openGallery = function(type, target) {
     document.getElementById('galleryModal').classList.remove('hidden');
     const upBtn = document.getElementById('galUploadBtn');
@@ -366,7 +254,6 @@ function loadGal(type, cat, target) {
         const previewUrl = `assets/${folder}/${previewName}`;
         const printUrl = `assets/${folder}/${f}`;
         img.src = previewUrl; img.onerror = () => { img.src = printUrl; };
-        // FIX: CORS
         img.crossOrigin = 'anonymous'; 
         item.appendChild(img);
         item.onclick = () => {
@@ -402,7 +289,6 @@ function initListeners() {
         const el = document.getElementById(id);
         if (el) {
             el.oninput = () => {
-                userModifiedText = true;
                 if (id === 'inputLine1') state.text.lines[0].text = el.value;
                 if (id === 'inputLine2') state.text.lines[1].text = el.value;
                 if (id === 'inputLine3') state.text.lines[2].text = el.value;
@@ -474,7 +360,6 @@ function processAndResizeImage(file, maxSize, outputType, callback) {
     const reader = new FileReader();
     reader.onload = (ev) => {
         const img = new Image();
-        // FIX: CORS для локальных файлов
         img.crossOrigin = 'anonymous';
         img.onload = () => {
             let width = img.width; let height = img.height;
@@ -495,7 +380,7 @@ function updateSymbolUI() {
         btn.style.backgroundImage = `url(${state.images.icon})`;
         btn.classList.add('active'); btn.style.borderColor = state.text.color;
     } else {
-        btn.style.backgroundImage = 'none'; btn.classList.remove('active'); btn.style.borderColor = '#444';
+        btn.style.backgroundImage = 'none'; btn.classList.remove('active'); btn.style.borderColor = '#ccc';
     }
 }
 
@@ -547,22 +432,11 @@ window.setScale = (s) => {
         window.updateScaleFromSlider(idx + 1);
     }
 };
-window.triggerAssetLoader = () => {};
 
-// =========================================================
-// 5. CROPPER TOOL (СТРОГИЕ ГРАНИЦЫ)
-// =========================================================
+// CROPPER TOOL
 const CropperTool = {
-    canvas: null,
-    ctx: null,
-    image: null,
-    scale: 1,
-    offsetX: 0, offsetY: 0,
-    isDragging: false,
-    startX: 0, startY: 0,
-    maskW: 0, maskH: 0,
-    maskType: 'rect',
-    canvasSize: 300, 
+    canvas: null, ctx: null, image: null, scale: 1, offsetX: 0, offsetY: 0,
+    isDragging: false, startX: 0, startY: 0, maskW: 0, maskH: 0, maskType: 'rect', canvasSize: 300, 
 
     start: function(imageUrl, wRatio, hRatio, type) {
         this.canvas = document.getElementById('cropCanvas');
@@ -570,70 +444,42 @@ const CropperTool = {
         this.maskType = type;
         this.canvas.width = this.canvasSize;
         this.canvas.height = this.canvasSize;
-
         const img = new Image();
-        img.crossOrigin = 'anonymous'; // FIX CORS
+        img.crossOrigin = 'anonymous'; 
         img.onload = () => {
             this.image = img;
             this.scale = Math.min(this.canvasSize / img.width, this.canvasSize / img.height); 
-            // Центрируем
             this.offsetX = (this.canvasSize - (img.width * this.scale)) / 2;
             this.offsetY = (this.canvasSize - (img.height * this.scale)) / 2;
-            
             this.drawOverlay(wRatio, hRatio);
             this.setupEvents();
         };
         img.src = imageUrl;
     },
-
     drawOverlay: function(w, h) {
         if (!this.ctx || !this.image) return;
-        
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.ctx.fillStyle = '#000';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // Рисуем картинку
         this.ctx.drawImage(this.image, this.offsetX, this.offsetY, this.image.width * this.scale, this.image.height * this.scale);
-
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // Рассчет маски
         const maxSize = this.canvasSize * 0.8;
         let maskPixelW, maskPixelH;
-
-        if (w >= h) {
-            maskPixelW = maxSize;
-            maskPixelH = maxSize * (h / w);
-        } else {
-            maskPixelH = maxSize;
-            maskPixelW = maxSize * (w / h);
-        }
-
-        this.maskW = maskPixelW;
-        this.maskH = maskPixelH;
-
+        if (w >= h) { maskPixelW = maxSize; maskPixelH = maxSize * (h / w); } 
+        else { maskPixelH = maxSize; maskPixelW = maxSize * (w / h); }
+        this.maskW = maskPixelW; this.maskH = maskPixelH;
         const maskX = (this.canvasSize - maskPixelW) / 2;
         const maskY = (this.canvasSize - maskPixelH) / 2;
-
         this.ctx.save();
         this.ctx.beginPath();
-        if (this.maskType === 'circle') {
-            this.ctx.arc(this.canvasSize/2, this.canvasSize/2, maskPixelW/2, 0, Math.PI*2);
-        } else {
-            this.ctx.rect(maskX, maskY, maskPixelW, maskPixelH);
-        }
+        if (this.maskType === 'circle') this.ctx.arc(this.canvasSize/2, this.canvasSize/2, maskPixelW/2, 0, Math.PI*2);
+        else this.ctx.rect(maskX, maskY, maskPixelW, maskPixelH);
         this.ctx.clip();
-
         this.ctx.drawImage(this.image, this.offsetX, this.offsetY, this.image.width * this.scale, this.image.height * this.scale);
         this.ctx.restore();
-
-        this.ctx.strokeStyle = '#D4AF37';
-        this.ctx.lineWidth = 2;
-        this.ctx.stroke();
+        this.ctx.strokeStyle = '#D4AF37'; this.ctx.lineWidth = 2; this.ctx.stroke();
     },
-
     setupEvents: function() {
         const slider = document.getElementById('zoomSlider');
         slider.value = 1;
@@ -642,101 +488,57 @@ const CropperTool = {
             const baseScale = Math.min(this.canvasSize / this.image.width, this.canvasSize / this.image.height);
             const oldScale = this.scale;
             this.scale = baseScale * zoom;
-            
             const ratio = this.scale / oldScale;
             this.offsetX = this.canvasSize/2 - (this.canvasSize/2 - this.offsetX) * ratio;
             this.offsetY = this.canvasSize/2 - (this.canvasSize/2 - this.offsetY) * ratio;
-
             this.drawOverlay(state.slotSize.w, state.slotSize.h);
         };
-
         let lastX, lastY;
         const startDrag = (x, y) => { this.isDragging = true; lastX = x; lastY = y; };
-        
         const moveDrag = (x, y) => {
             if (this.isDragging) {
-                const dx = x - lastX;
-                const dy = y - lastY;
-                
-                // === СТРОГОЕ ОГРАНИЧЕНИЕ (CLAMP) ===
-                // Границы маски
+                const dx = x - lastX; const dy = y - lastY;
                 const maskX = (this.canvasSize - this.maskW) / 2;
                 const maskY = (this.canvasSize - this.maskH) / 2;
                 const maskRight = maskX + this.maskW;
                 const maskBottom = maskY + this.maskH;
-
-                // Размеры картинки
                 const imgW = this.image.width * this.scale;
                 const imgH = this.image.height * this.scale;
-
-                // Предлагаемые новые координаты
                 let newOffsetX = this.offsetX + dx;
                 let newOffsetY = this.offsetY + dy;
-
-                // 1. Левый край картинки не может быть правее левого края маски
                 if (newOffsetX > maskX) newOffsetX = maskX;
-                // 2. Правый край картинки не может быть левее правого края маски
                 if (newOffsetX + imgW < maskRight) newOffsetX = maskRight - imgW;
-
-                // 3. Верхний край картинки не может быть ниже верхнего края маски
                 if (newOffsetY > maskY) newOffsetY = maskY;
-                // 4. Нижний край картинки не может быть выше нижнего края маски
                 if (newOffsetY + imgH < maskBottom) newOffsetY = maskBottom - imgH;
-
-                this.offsetX = newOffsetX;
-                this.offsetY = newOffsetY;
-                
-                lastX = x;
-                lastY = y;
+                this.offsetX = newOffsetX; this.offsetY = newOffsetY;
+                lastX = x; lastY = y;
                 this.drawOverlay(state.slotSize.w, state.slotSize.h);
             }
         };
         const endDrag = () => { this.isDragging = false; };
-
         this.canvas.onmousedown = (e) => startDrag(e.clientX, e.clientY);
         window.onmousemove = (e) => moveDrag(e.clientX, e.clientY);
         window.onmouseup = endDrag;
-
         this.canvas.ontouchstart = (e) => { startDrag(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); };
         window.ontouchmove = (e) => { moveDrag(e.touches[0].clientX, e.touches[0].clientY); };
         window.ontouchend = endDrag;
     },
-
     rotate: function() {
         if (!this.image) return;
-        const c = document.createElement('canvas');
-        c.width = this.image.height;
-        c.height = this.image.width;
-        const ctx = c.getContext('2d');
-        ctx.translate(c.width/2, c.height/2);
-        ctx.rotate(90 * Math.PI / 180);
+        const c = document.createElement('canvas'); c.width = this.image.height; c.height = this.image.width;
+        const ctx = c.getContext('2d'); ctx.translate(c.width/2, c.height/2); ctx.rotate(90 * Math.PI / 180);
         ctx.drawImage(this.image, -this.image.width/2, -this.image.height/2);
         const newImg = new Image();
-        newImg.onload = () => {
-            this.image = newImg;
-            this.drawOverlay(state.slotSize.w, state.slotSize.h);
-        };
+        newImg.onload = () => { this.image = newImg; this.drawOverlay(state.slotSize.w, state.slotSize.h); };
         newImg.src = c.toDataURL();
     },
-
     apply: function() {
-        const maskCX = this.canvasSize / 2;
-        const maskCY = this.canvasSize / 2;
-        
+        const maskCX = this.canvasSize / 2; const maskCY = this.canvasSize / 2;
         const imgCX = this.offsetX + (this.image.width * this.scale / 2);
         const imgCY = this.offsetY + (this.image.height * this.scale / 2);
-        
-        const deltaX = imgCX - maskCX;
-        const deltaY = imgCY - maskCY;
-        
         return {
             src: this.image.src,
-            cropInfo: {
-                left: deltaX, 
-                top: deltaY,
-                scale: this.scale,
-                slotPixelSize: this.maskW 
-            }
+            cropInfo: { left: imgCX - maskCX, top: imgCY - maskCY, scale: this.scale, slotPixelSize: this.maskW }
         };
     }
 };

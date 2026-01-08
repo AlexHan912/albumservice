@@ -1,13 +1,10 @@
-/* assets.js - V98: Print Formats & Data */
-
-// 1. ФОРМАТЫ КНИГ (ТОЧНЫЕ РАЗМЕРЫ В ММ)
+/* assets.js - Physical Dimensions Preserved */
 window.BOOK_FORMATS = {
     '30x30': { widthMm: 303, heightMm: 303, spineMm: 20, bleedMm: 15 },
     '25x25': { widthMm: 253, heightMm: 253, spineMm: 20, bleedMm: 15 },
     '20x20': { widthMm: 203, heightMm: 203, spineMm: 20, bleedMm: 15 }
 };
 
-// 2. СИМВОЛЫ И ГРАФИКА
 window.ASSETS_DB = {
     symbols: {
         "Love symbols": ["love_heart.png"],
@@ -20,7 +17,6 @@ window.ASSETS_DB = {
     }
 };
 
-// 3. ПАЛИТРЫ
 window.DESIGNER_PALETTES = {
     'Kinfolk - Cinema': [
         { bg: '#556B2F', text: '#F5F5DC' }, { bg: '#8B4513', text: '#FAEBD7' },
@@ -45,17 +41,5 @@ window.DESIGNER_PALETTES = {
         { bg: '#6667AB', text: '#FFFFFF' }, { bg: '#F5DF4D', text: '#939597' },
         { bg: '#939597', text: '#F5DF4D' }, { bg: '#0F4C81', text: '#FFFFFF' },
         { bg: '#FF6F61', text: '#FFFFFF' }, { bg: '#5F4B8B', text: '#FFFFFF' }
-    ],
-    'Fashion Magazine': [
-        { bg: '#000000', text: '#FFFFFF' }, { bg: '#FFFFFF', text: '#000000' },
-        { bg: '#FF0000', text: '#FFFFFF' }, { bg: '#1A1A1A', text: '#D4AF37' },
-        { bg: '#2C3E50', text: '#ECF0F1' }, { bg: '#800000', text: '#FFD700' },
-        { bg: '#000080', text: '#C0C0C0' }, { bg: '#333333', text: '#00FF00' }
-    ],
-    'Avant-Garde': [
-        { bg: '#FFFF00', text: '#000000' }, { bg: '#0000FF', text: '#FFFF00' },
-        { bg: '#FF00FF', text: '#00FF00' }, { bg: '#00FF00', text: '#FF00FF' },
-        { bg: '#FF6600', text: '#0000FF' }, { bg: '#111111', text: '#FFD700' },
-        { bg: '#FF0000', text: '#00FFFF' }, { bg: '#FFFFFF', text: '#FF0000' }
     ]
 };

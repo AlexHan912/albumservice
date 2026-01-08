@@ -1,4 +1,4 @@
-/* cover-engine.js - FIXED V102: MM Layout, Centering, Clipping */
+/* cover-engine.js - V103: Strict Print Logic + Font Loading */
 
 const CONFIG = {
     renderScale: 2.0,
@@ -17,11 +17,23 @@ const CoverEngine = {
             enableRetinaScaling: true,
             hoverCursor: 'default'
         });
+        // Initial Font Load Check
+        this.waitForFonts();
+    },
+
+    waitForFonts: async function() {
+        if(document.fonts) {
+            await document.fonts.load('1rem "Tenor Sans"');
+            await document.fonts.load('1rem "Bodoni Moda"');
+            await document.fonts.load('1rem "Yeseva One"');
+            console.log("Fonts loaded.");
+            if(this.canvas) this.canvas.requestRenderAll();
+        }
     },
 
     loadSimpleImage: function(path, callback) {
         const img = new Image();
-        img.crossOrigin = 'anonymous'; // FIX CORS
+        img.crossOrigin = 'anonymous'; 
         img.onload = () => callback(path);
         img.onerror = () => { callback(null); };
         img.src = path;
@@ -41,24 +53,22 @@ const CoverEngine = {
         const fullW_mm = fmt.bleedMm + fmt.widthMm + fmt.spineMm + fmt.widthMm + fmt.bleedMm;
         const fullH_mm = fmt.bleedMm + fmt.heightMm + fmt.bleedMm;
 
-        // Available Screen Space
-        const margin = 20;
-        // Don't subtract heavy dock height if not present, just margin
+        // Available Screen Space (Center Workspace)
+        const margin = 40; 
         const availW = container.clientWidth;
         const availH = container.clientHeight;
 
         // Scale to Fit
-        const scaleX = (availW - margin*2) / fullW_mm;
-        const scaleY = (availH - margin*2) / fullH_mm;
+        const scaleX = (availW - margin) / fullW_mm;
+        const scaleY = (availH - margin) / fullH_mm;
         const basePPI = Math.min(scaleX, scaleY);
         
         this.canvas.state_ppi = basePPI; 
 
-        // Resize Canvas to Match Container (for correct Centering)
+        // Resize Canvas
         this.canvas.setWidth(availW); 
         this.canvas.setHeight(availH);
         
-        // Reset CSS that might conflict
         this.canvas.wrapperEl.style.width = ''; 
         this.canvas.wrapperEl.style.height = '';
         
@@ -83,7 +93,8 @@ const CoverEngine = {
 
         const bgRect = new fabric.Rect({
             left: startX, top: startY, width: coverW_px, height: coverH_px,
-            fill: state.coverColor, selectable: false, evented: false
+            fill: state.coverColor, selectable: false, evented: false,
+            shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.15)', blur: 20, offsetX: 0, offsetY: 10 })
         });
         this.canvas.add(bgRect);
 
@@ -116,7 +127,7 @@ const CoverEngine = {
     },
 
     _drawGuides: function(x1, x2, x3, x4, yStart, h, yContentTop, yContentBot, xStart, w) {
-        const opts = { stroke: '#777', strokeWidth: 1, strokeDashArray: [5, 5], selectable: false, evented: false, opacity: 0.5 };
+        const opts = { stroke: '#ccc', strokeWidth: 1, strokeDashArray: [4, 4], selectable: false, evented: false, opacity: 0.5 };
         [x1, x2, x3, x4].forEach(x => this.canvas.add(new fabric.Line([x, yStart, x, yStart + h], opts)));
         this.canvas.add(new fabric.Line([xStart, yContentTop, xStart + w, yContentTop], opts));
         this.canvas.add(new fabric.Line([xStart, yContentBot, xStart + w, yContentBot], opts));
@@ -204,11 +215,15 @@ const CoverEngine = {
         let opacity = hasText ? CONFIG.globalOpacity : 0.3;
         const baseSizeMm = compact ? 8 : 12; 
         const finalSize = baseSizeMm * ppi * state.text.scale;
-        const tObj = new fabric.Text(renderTxt, { fontFamily: state.text.font, fontSize: finalSize, textAlign: 'center', lineHeight: 1.3, fill: state.text.color, opacity: opacity, selectable: false, evented: false, originX: 'center', originY: 'center' });
+        
+        // Use Font Engine Safe Load
+        const fontName = state.text.font || 'Tenor Sans';
+
+        const tObj = new fabric.Text(renderTxt, { fontFamily: fontName, fontSize: finalSize, textAlign: 'center', lineHeight: 1.3, fill: state.text.color, opacity: opacity, selectable: false, evented: false, originX: 'center', originY: 'center' });
         const group = new fabric.Group([tObj], { originX: 'center', originY: 'center', selectable: false, evented: false });
         if(state.text.date) { 
             const dateStr = state.text.date; const dateSize = 4 * ppi * state.text.scale; const gap = (compact ? 5 : 10) * ppi;
-            const dObj = new fabric.Text(dateStr, { fontFamily: state.text.font, fontSize: dateSize, fill: state.text.color, opacity: CONFIG.globalOpacity, originX: 'center', originY: 'top', top: (tObj.height / 2) + gap, selectable: false, evented: false });
+            const dObj = new fabric.Text(dateStr, { fontFamily: fontName, fontSize: dateSize, fill: state.text.color, opacity: CONFIG.globalOpacity, originX: 'center', originY: 'top', top: (tObj.height / 2) + gap, selectable: false, evented: false });
             group.addWithUpdate(dObj);
         }
         return group;
@@ -308,7 +323,12 @@ const CoverEngine = {
     },
     
     download: function(state) {
-        const data = this.canvas.toDataURL({ format: 'png', multiplier: 1 });
+        const data = this.canvas.toDataURL({ format: 'png', multiplier: 2 }); // High Quality
         const a = document.createElement('a'); a.download = `malevich_${state.format}.png`; a.href = data; a.click();
+    },
+
+    getPrintMultiplier: function(targetPPI) {
+        if(!this.canvas.state_ppi) return 1;
+        return targetPPI / this.canvas.state_ppi;
     }
 };
